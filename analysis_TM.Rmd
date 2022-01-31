@@ -1,0 +1,142 @@
+---
+title: "Data_Analisis_Scopus_WoS"
+author: "Sebastian Robledo"
+date: "1/28/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Creating the environment 
+
+```{r}
+library(tidyverse)
+library(tidygraph)
+library(igraph)
+library(bibliometrix)
+library(tosr)
+library(here)
+library(lubridate)
+```
+
+# Getting data 
+
+```{r}
+wos <- bibliometrix::convert2df(here("data", 
+                                     "savedrecs_TM.txt"), 
+                                "wos", 
+                                format = "plaintext")
+
+scopus <- bibliometrix::convert2df(here("data",
+                                        "scopus_TM.bib"), 
+                                   dbsource = "scopus", 
+                                   format = "bibtex")
+
+wos_scopus_tos <- tosr_load("data/savedrecs_TM.txt", "data/scopus_TM.bib")
+```
+
+# Data analysis
+
+```{r}
+wos_anual_production <- 
+  wos |> 
+  select(PY) |> 
+  count(PY, sort = TRUE) |> 
+  na.omit() |> 
+  filter(PY >= 2000,
+         PY < year(today())) |> 
+  mutate(ref_type = "wos")
+scopus_anual_production  <- 
+  scopus |> 
+  select(PY) |> 
+  count(PY, sort = TRUE) |> 
+  na.omit() |> 
+  filter(PY >= 2000,
+         PY < year(today())) |>
+  mutate(ref_type = "scopus")
+
+total_anual_production <- 
+  wos_scopus_tos$df |> 
+  select(PY) |> 
+  count(PY, sort = TRUE) |> 
+  na.omit() |> 
+  filter(PY >= 2000,
+         PY < year(today())) |>
+  mutate(ref_type = "total")
+
+wos_scopus_total_annual_production <- 
+  wos_anual_production |> 
+  bind_rows(scopus_anual_production,
+            total_anual_production) 
+
+figure_2_data <- 
+  wos_scopus_total_annual_production |> 
+  mutate(PY = replace_na(PY, replace = 0)) |> 
+  pivot_wider(names_from = ref_type, 
+              values_from = n) |> 
+  arrange(desc(PY))
+
+wos_scopus_total_annual_production |> 
+  ggplot(aes(x = PY, y = n, color = ref_type)) +
+  geom_line() +
+  labs(title = "Annual Scientific Production", 
+       x = "years",
+       y = "papers") +
+  theme(plot.title = element_text(hjust = 0.5)) 
+```
+
+I would like to create a bar graph of WoS and Scopus data 
+
+```{r}
+figure_2_data |> 
+  ggplot() +
+  geom_bar(aes(x = PY, y = wos), 
+           stat = "identity") +
+  geom_line(aes(x = ))
+  labs(title = "Annual Scientific Production", 
+       x = "year",
+       y = "Number of publications") +
+  theme(plot.title = element_text(hjust = 0.5)) 
+```
+
+
+
+We need to identify the times cited variable for each database and later sum them all. 
+
+Time Cited from web of science
+
+```{r}
+TC_wos <- 
+  wos |> 
+  select(PY, TC) |> 
+  group_by(PY) |> 
+  summarise(TC_sum = sum(TC)) |> 
+  arrange(desc(PY)) |> 
+  na.omit() 
+```
+
+Time Cited from WoS
+
+```{r}
+TC_scopus <- 
+  scopus |> 
+  select(PY, TC) |> 
+  group_by(PY) |> 
+  summarise(TC_sum = sum(TC)) |> 
+  arrange(desc(PY)) |> 
+  na.omit() 
+```
+
+Summing both datasets 
+
+```{r}
+TC_all <- 
+  TC_wos |> 
+  left_join(TC_scopus, by = "PY", suffix = c("_wos", "_scopus")) |> 
+  mutate(TC_sum_all = TC_sum_wos + TC_sum_scopus) |> 
+  select(PY, TC_sum_all)
+```
+
+
