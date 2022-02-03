@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Creating the environment
 
-```{r}
+```{r, echo=FALSE}
 library(tidyverse)
 library(tidygraph)
 library(igraph)
@@ -131,12 +131,20 @@ Summing both data sets
 
 ```{r}
 TC_all <- 
-  TC_wos |> 
-  left_join(TC_scopus, by = "PY", suffix = c("_wos", "_scopus")) |> 
+  TC_scopus |> 
+  left_join(TC_wos, 
+            by = "PY", 
+            suffix = c("_wos", 
+                       "_scopus")) |> 
+  replace_na(replace = list(TC_sum_scopus = 0)) |> 
   mutate(TC_sum_all = TC_sum_wos + TC_sum_scopus,
          TC_total = sum(TC_sum_all),
          TC_percentage = round(TC_sum_all/TC_total, digits = 2)) |> 
   select(PY, TC_sum_all, TC_percentage) 
+
+TC_all |> 
+  ggplot(aes(x = PY , y = TC_sum_all)) +
+  geom_line(stat = "identity") 
 ```
 
 Merging both datasets and create a new bar-line graph
@@ -244,3 +252,74 @@ figure_1b
 Final Figure 1
 
 ![](figures/Figure_1.png "Figure 1")
+
+# Descriptive analysis 
+
+### Total publications
+
+Total papers in the whole time
+
+```{r}
+wos_scopus_total_annual_production |> 
+  filter(ref_type %in% c("wos", "scopus")) |> 
+  select(n) |> 
+  summarize(total = sum(n)) |> 
+  pull()
+```
+
+### Initial Growth Stage
+
+Total papers in the initial growth stage
+
+```{r}
+ig_stage_publications <- 
+  wos_scopus_total_annual_production |> 
+  filter(PY >= 2004, 
+         PY <= 2013, 
+         ref_type %in% c("wos", "scopus")) |> 
+  select(n) |> 
+  summarize(total = sum(n))
+
+ig_stage_publications |> pull()
+```
+
+Therefore, the proportion of papers in the initial stage compare with the sum of all stages is **10.54%** (227/2154\*100)
+
+Total papers for WoS in the initial growth stage
+
+```{r}
+ig_stage_publications_wos <- 
+  wos_scopus_total_annual_production |> 
+  filter(PY >= 2004, 
+         PY <= 2013, 
+         ref_type %in% c("wos", "scopus")) |> 
+  filter(ref_type == "wos") |>
+  select(n) |> 
+  summarize(total = sum(n))
+
+ig_stage_publications_wos |> pull()
+```
+
+Total papers for Scopus in the initial growth stage
+
+```{r}
+ig_stage_publications_scopus <- 
+  wos_scopus_total_annual_production |> 
+  filter(PY >= 2004, 
+         PY <= 2013, 
+         ref_type %in% c("wos", "scopus")) |> 
+  filter(ref_type == "scopus") |>
+  select(n) |> 
+  summarize(total = sum(n))
+
+ig_stage_publications_scopus |> pull()
+```
+
+Total citations in initial growth stage
+
+```{r}
+TC_all |> 
+  filter(PY >= 2004, 
+         PY <= 2013) |> 
+  summarize(ig_total_citaitons = sum(TC_sum_all))
+```
