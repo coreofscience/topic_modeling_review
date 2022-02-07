@@ -47,7 +47,7 @@ wos_anual_production <-
   na.omit() |> 
   filter(PY >= 2000,
          PY < year(today())) |> 
-  mutate(ref_type = "wos")
+  mutate(ref_type = "wos") 
 
 scopus_anual_production  <- 
   scopus |> 
@@ -56,7 +56,8 @@ scopus_anual_production  <-
   na.omit() |> 
   filter(PY >= 2000,
          PY < year(today())) |>
-  mutate(ref_type = "scopus")
+  mutate(ref_type = "scopus") |> 
+  bind_rows(tibble(PY = 2007, n = 0, ref_type = "scopus"))
 
 total_anual_production <- 
   wos_scopus_tos$df |> 
@@ -65,14 +66,15 @@ total_anual_production <-
   na.omit() |> 
   filter(PY >= 2000,
          PY < year(today())) |>
-  mutate(ref_type = "total")
+  mutate(ref_type = "total") |> 
+  bind_rows(tibble(PY = 2007, n = 0, ref_type = "total"))
 
 wos_scopus_total_annual_production <- 
   wos_anual_production |> 
   bind_rows(scopus_anual_production,
             total_anual_production) 
 
-figure_2_data <- 
+figure_1_data <- 
   wos_scopus_total_annual_production |> 
   mutate(PY = replace_na(PY, replace = 0)) |> 
   pivot_wider(names_from = ref_type, 
@@ -89,17 +91,6 @@ wos_scopus_total_annual_production |>
 ```
 
 I would like to create a bar graph of WoS and Scopus data
-
-```{r}
-figure_2_data |> 
-  ggplot() +
-  geom_bar(aes(x = PY, y = wos), 
-           stat = "identity") +
-  labs(title = "Annual Scientific Production", 
-       x = "year",
-       y = "Number of publications") +
-  theme(plot.title = element_text(hjust = 0.5)) 
-```
 
 We need to identify the times cited variable for each database and later sum them all.
 
@@ -127,99 +118,12 @@ TC_scopus <-
   na.omit() 
 ```
 
-Summing both data sets
+# Figure 1
+
+## Figure 1a
 
 ```{r}
-TC_all <- 
-  TC_scopus |> 
-  left_join(TC_wos, 
-            by = "PY", 
-            suffix = c("_wos", 
-                       "_scopus")) |> 
-  replace_na(replace = list(TC_sum_scopus = 0)) |> 
-  mutate(TC_sum_all = TC_sum_wos + TC_sum_scopus,
-         TC_total = sum(TC_sum_all),
-         TC_percentage = round(TC_sum_all/TC_total, digits = 2)) |> 
-  select(PY, TC_sum_all, TC_percentage) 
-
-TC_all |> 
-  ggplot(aes(x = PY , y = TC_sum_all)) +
-  geom_line(stat = "identity") +
-  geom_point() +
-  scale_x_continuous(breaks = seq(2004,2021, by = 1)) +
-  geom_text(aes(label = TC_sum_all))
-```
-
-Merging both datasets and create a new bar-line graph
-
-```{r}
-figure_1_data <- 
-  figure_2_data |> 
-  left_join(TC_all, by = "PY") |> 
-  replace_na(replace = list(wos = 0, 
-                            TC_sum_all = 0)) |>
-  filter(PY != 2022) |> 
-  arrange(PY) |> 
-  # na.omit() |>
-  mutate(TC_cumsum = cumsum(TC_sum_all),
-         TC_cumsum_perct = TC_cumsum/max(TC_cumsum),
-         TC_cumsum_perct = round(TC_cumsum_perct, digits = 4)) 
-
 figure_1a <- 
-  figure_1_data |> 
-  ggplot(aes(x = PY, 
-             y = 100*TC_cumsum_perct, 
-             label = 100*TC_cumsum_perct)) +
-  geom_line(aes(x = PY, 
-                y = 100*TC_cumsum_perct), 
-            stat = "identity",
-            color = "red") +
-  geom_point(aes(x = PY, 
-                 y = 100*TC_cumsum_perct), 
-             color = "red") +
-  scale_x_continuous(breaks = seq(2004,2021, by = 1)) +
-  labs(title = "Annual Scientific Production", 
-       x = "year",
-       y = "Number of publications") +
-  geom_text(aes(label = 100*TC_cumsum_perct),
-            vjust = "inward", 
-            hjust = "inward",
-            show.legend = FALSE,
-            color = "red",
-            size = 3) +
-  theme(plot.title = element_text(hjust = 0.5)) + 
-  scale_y_continuous(sec.axis = sec_axis(~.*0.01, 
-                                         name = "Percentange of Cumulative Citations",
-                                         labels = scales::percent)) +
-  theme(text = element_text(family = "Times",
-                            face = "bold",
-                            size =12),
-        panel.background = element_rect(fill = "white"),
-        legend.position = "bottom",
-        legend.title = element_text(size = 0),
-        axis.text.x = element_text(face = "bold", 
-                                   angle = 45, 
-                                   vjust = 0.5)) +
-  labs(y = "Number of publications", 
-       x = "Year") +
-  theme(text = element_text(family = "Times",
-                            face = "bold",
-                            size =12),
-        panel.background = element_rect(fill = "white"),
-        legend.position = "bottom",
-        legend.title = element_text(size = 0),
-        axis.text.x = element_text(face = "bold", 
-                                   angle = 45, 
-                                   vjust = 0.5)) 
-
-figure_1a
-
-```
-
-Fill graph bar with each database
-
-```{r}
-figure_1b <- 
   wos_scopus_total_annual_production |> 
   filter(ref_type != "total") |> 
   ggplot(aes(x = factor(PY), 
@@ -249,10 +153,98 @@ figure_1b <-
        x = "Year") +
   scale_y_continuous(breaks = seq(0,300, 
                                   by = 50)) 
-figure_1b
+figure_1a
+
 ```
 
-Improving the figure
+## Figure 1b
+
+```{r}
+
+figure_1b <- 
+  figure_1_data |> 
+  ggplot(aes(x = PY, y = total)) +
+  geom_line(stat = "identity", color = "red") +
+  geom_point(stat = "identity", color = "red") +
+  scale_x_continuous(breaks = seq(2004, 2021, by = 1)) +
+  geom_text(aes(label = total),
+            vjust = -0.3,
+            position = position_dodge(0.9),
+            size = 3,
+            family = "Times", 
+            color = "red") +
+  scale_fill_manual(values = c("springgreen3",
+                               "orange3")) +
+  theme(text = element_text(family = "Times",
+                            face = "bold",
+                            size =12),
+        panel.background = element_rect(fill = "white"),
+        legend.position = "bottom",
+        legend.title = element_text(size = 0),
+        axis.text.x = element_text(face = "bold", 
+                                   angle = 45, 
+                                   vjust = 0.5),
+        axis.line = element_line(color = "black", 
+                                 size = 0.2)) +
+  labs(y = "Number of total publications", 
+       x = "Year") +
+  scale_y_continuous(breaks = seq(0,300, 
+                                  by = 50)) 
+
+figure_1b
+
+```
+
+## Figure 1c
+
+```{r}
+TC_all <- 
+  TC_scopus |> 
+  left_join(TC_wos, 
+            by = "PY", 
+            suffix = c("_wos", 
+                       "_scopus")) |> 
+  replace_na(replace = list(TC_sum_scopus = 0)) |> 
+  mutate(TC_sum_all = TC_sum_wos + TC_sum_scopus,
+         TC_total = sum(TC_sum_all),
+         TC_percentage = round(TC_sum_all/TC_total, digits = 2)) |> 
+  select(PY, TC_sum_all, TC_percentage) |> 
+  filter(PY != 2022)
+
+figure_1c <- 
+  TC_all |> 
+  ggplot(aes(x = PY , y = TC_sum_all)) +
+  geom_line(stat = "identity", color = "purple") +
+  geom_point(color = "purple") +
+  scale_x_continuous(breaks = seq(2004, 2021, by = 1)) +
+  geom_text(aes(label = TC_sum_all),
+            vjust = -0.3,
+            position = position_dodge(0.9),
+            size = 3,
+            family = "Times", 
+            color = "purple") +
+  scale_fill_manual(values = c("springgreen3",
+                               "orange3")) +
+  theme(text = element_text(family = "Times",
+                            face = "bold",
+                            size =12),
+        panel.background = element_rect(fill = "white"),
+        legend.position = "bottom",
+        legend.title = element_text(size = 0),
+        axis.text.x = element_text(face = "bold", 
+                                   angle = 45, 
+                                   vjust = 0.5),
+        axis.line = element_line(color = "black", 
+                                 size = 0.2)) +
+  labs(y = "Number of citations", 
+       x = "Year") +
+  scale_y_continuous(breaks = seq(0,3500, 
+                                  by = 500)) 
+
+figure_1c
+```
+
+## Figure 1 - Final
 
 Final Figure 1 with inkscape
 
