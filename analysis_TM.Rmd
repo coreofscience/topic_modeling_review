@@ -144,7 +144,10 @@ TC_all <-
 
 TC_all |> 
   ggplot(aes(x = PY , y = TC_sum_all)) +
-  geom_line(stat = "identity") 
+  geom_line(stat = "identity") +
+  geom_point() +
+  scale_x_continuous(breaks = seq(2004,2021, by = 1)) +
+  geom_text(aes(label = TC_sum_all))
 ```
 
 Merging both datasets and create a new bar-line graph
@@ -249,22 +252,38 @@ figure_1b <-
 figure_1b
 ```
 
-Final Figure 1
+Improving the figure
+
+Final Figure 1 with inkscape
 
 ![](figures/Figure_1.png "Figure 1")
 
-# Descriptive analysis 
+# Descriptive analysis
 
 ### Total publications
 
 Total papers in the whole time
 
 ```{r}
-wos_scopus_total_annual_production |> 
+total_publications <- 
+  wos_scopus_total_annual_production |> 
   filter(ref_type %in% c("wos", "scopus")) |> 
   select(n) |> 
   summarize(total = sum(n)) |> 
   pull()
+
+total_publications
+```
+
+### Total Citations
+
+```{r}
+TC_all_pull <- 
+  TC_all |>
+  summarize(ig_total_citaitons = sum(TC_sum_all)) |> 
+  pull()
+
+TC_all_pull
 ```
 
 ### Initial Growth Stage
@@ -318,8 +337,162 @@ ig_stage_publications_scopus |> pull()
 Total citations in initial growth stage
 
 ```{r}
-TC_all |> 
+TC_ig <- 
+  TC_all |> 
   filter(PY >= 2004, 
          PY <= 2013) |> 
-  summarize(ig_total_citaitons = sum(TC_sum_all))
+  summarize(ig_total_citaitons = sum(TC_sum_all)) |> 
+  pull()
+
+TC_ig
+```
+
+```{r}
+
+TC_ig/TC_all_pull*100
+```
+
+What is the most cited paper during IG stage?
+
+```{r}
+wos_scopus_tos$df |> 
+  select(TI, TC, PY) |> 
+  filter(PY >=2004,
+         PY <= 2013) |> 
+  arrange(desc(TC)) |> View()
+
+```
+
+### Rapid Development Stage
+
+Total papers in the rd stage
+
+```{r}
+rd_stage_publications <- 
+  wos_scopus_total_annual_production |> 
+  filter(PY >= 2014, 
+         PY <= 2019, 
+         ref_type %in% c("wos", "scopus")) |> 
+  select(n) |> 
+  summarize(total = sum(n)) |> 
+  pull()
+
+rd_stage_publications
+
+```
+
+Percentage of the total publications
+
+```{r}
+rd_stage_publications / total_publications *100
+```
+
+Total citations in the rd stage
+
+```{r}
+TC_rd <- 
+  TC_all |> 
+  filter(PY >= 2014, 
+         PY <= 2019) |> 
+  summarize(ig_total_citaitons = sum(TC_sum_all)) |> 
+  pull()
+
+TC_rd
+```
+
+Percentage of the total citations
+
+```{r}
+TC_rd / TC_all_pull *100
+```
+
+Calculating the average growth percentage of publications during rd stage
+
+```{r}
+rd_publications_growth_rate <- 
+  wos_scopus_tos$df %>%
+  filter(PY >= 2014,
+         PY <= 2019) |> 
+  select(PY) |> 
+  count(PY) |> 
+  # first sort by year
+  arrange(PY) %>%
+  mutate(diff_growth = n - lag(n),
+         rate_percentage = (diff_growth/n)*100,
+         rate_percentage = round(rate_percentage, 
+                                 digits = 2) )
+
+mean(rd_publications_growth_rate |> 
+       select(rate_percentage) |> 
+       pull(), 
+     na.rm = TRUE)
+```
+
+Finding the most cited document during this stage
+
+```{r}
+wos_scopus_tos$df |> 
+  filter(PY == 2016) |>
+  select(TI, PY, TC) |> 
+  arrange(desc(TC)) |> 
+  slice(1) |> 
+  select(TI) |> 
+  pull()
+```
+
+Which is the most productive journal in rd stage
+
+```{r}
+wos_scopus_tos$df |> 
+  filter(PY >= 2014,
+         PY <= 2019) |>
+  select(SO, TC) |>
+  filter(TC > 0) |>
+  group_by(SO) |> 
+  summarise(sum_citations = sum(TC),
+            count = n()) |> View()
+```
+
+### Stability Stage
+
+```{r}
+stability_stage_publications <- 
+  wos_scopus_total_annual_production |> 
+  filter(PY >= 2020, 
+         PY <= 2021, 
+         ref_type %in% c("wos", "scopus")) |> 
+  select(n) |> 
+  summarize(total = sum(n)) |> 
+  pull()
+
+stability_stage_publications
+  
+```
+
+Percentage
+
+```{r}
+stability_stage_publications / total_publications * 100
+```
+
+Growth rate
+
+```{r}
+stability_publications_growth_rate <- 
+  wos_scopus_tos$df %>%
+  filter(PY >= 2020,
+         PY <= 2021) |> 
+  select(PY) |> 
+  count(PY) |> 
+  # first sort by year
+  arrange(PY) %>%
+  mutate(diff_growth = n - lag(n),
+         rate_percentage = (diff_growth/n)*100,
+         rate_percentage = round(rate_percentage, 
+                                 digits = 2) )
+
+mean(stability_publications_growth_rate |> 
+       select(rate_percentage) |> 
+       pull(), 
+     na.rm = TRUE)
 ```
