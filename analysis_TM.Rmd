@@ -248,7 +248,7 @@ figure_1c
 
 Final Figure 1 with inkscape
 
-![](figures/Figure_1.png "Figure 1")
+![](figures/Figure_1_1.svg)
 
 # Descriptive analysis
 
