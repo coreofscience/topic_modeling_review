@@ -19,6 +19,7 @@ library(bibliometrix)
 library(tosr)
 library(here)
 library(lubridate)
+library(sjrdata)
 ```
 
 # Getting data
@@ -487,4 +488,119 @@ mean(stability_publications_growth_rate |>
        select(rate_percentage) |> 
        pull(), 
      na.rm = TRUE)
+```
+
+# Country production analysis
+
+## Table 2
+
+```{r}
+wos_scopus_countries <- 
+  wos_scopus_tos$df |> 
+  select(SR, AU_CO, TC) |> 
+  separate_rows(AU_CO, sep = ";") |> 
+  unique() |> 
+  drop_na()
+
+wos_scopus_countries_journals <- 
+  wos_scopus_countries |> 
+  left_join(wos_scopus_tos$df |> 
+              select(SR, SO, PY), 
+            by = "SR")
+
+scimago_2020 <- 
+  read_csv2("data/scimago2020.csv") |> 
+  select(SO = Title,
+         quartile = "SJR Best Quartile") |> 
+  mutate(PY = 2020)
+
+scimago_2021 <- 
+  read_csv2("data/scimago2020.csv") |> 
+  select(SO = Title,
+         quartile = "SJR Best Quartile") |> 
+  mutate(PY = 2021)
+
+scimago <- 
+  sjr_journals |> 
+  select(PY = year, 
+         SO = title,
+         quartile = sjr_best_quartile) |> 
+  mutate(SO = str_to_upper(SO),
+         PY = as.numeric(PY)) |> 
+  bind_rows(scimago_2020_2021)
+
+scimago_2020_2021 <- 
+  scimago_2020 |> 
+  bind_rows(scimago_2021) |> 
+  select(PY, SO, quartile)
+
+wos_scopus_countries_journals_scimago <- 
+  wos_scopus_countries_journals |> 
+  left_join(scimago, by = c("PY", "SO")) |>  
+  drop_na() |> 
+  select(AU_CO, TC, quartile) |> 
+  filter(quartile != "-")
+
+
+```
+
+### Table 2a - production
+
+Production per country
+
+```{r}
+table_2a <- 
+  wos_scopus_countries |> 
+  count(AU_CO, sort = TRUE)
+
+table_2a
+```
+
+### Table 2b - citations
+
+Citations recieved per country
+
+```{r}
+table_2b <- 
+  wos_scopus_countries_journals_scimago |> 
+  select(AU_CO, TC) |> 
+  group_by(AU_CO) |> 
+  summarise(citation = sum(TC)) |> 
+  arrange(desc(citation))
+
+table_2b
+```
+
+### Table 2c - Quartiles
+
+```{r}
+table_2c <- 
+  wos_scopus_countries_journals_scimago |> 
+  select(AU_CO, quartile) |> 
+  group_by(AU_CO) |> 
+  count(quartile, sort = TRUE) |> 
+  pivot_wider(names_from = quartile, 
+              values_from = n) |> 
+  select(AU_CO, Q1, Q2, Q3, Q4) |> 
+  mutate(Q1 = replace_na(Q1, 0),
+         Q2 = replace_na(Q2, 0),
+         Q3 = replace_na(Q3, 0),
+         Q4 = replace_na(Q4, 0))
+
+
+table_2c
+```
+
+### Table 2
+
+Merging all tables 2
+
+```{r}
+table_2 <- 
+  table_2a |> 
+  left_join(table_2b, by = "AU_CO") |> 
+  left_join(table_2c, by = "AU_CO") |> 
+  slice(1:10)
+
+table_2
 ```
