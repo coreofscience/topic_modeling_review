@@ -22,6 +22,7 @@ library(tosr)
 library(here)
 library(lubridate)
 library(sjrdata)
+library(openxlsx)
 ```
 
 # Getting data
@@ -127,7 +128,7 @@ scopus_anual_production  <-
   bind_rows(tibble(PY = 2007, n = 0, ref_type = "scopus"))
 
 total_anual_production <- 
-  wos_scopus_tos$df |> 
+  scopus_wos_final |> 
   select(PY) |> 
   count(PY, sort = TRUE) |> 
   na.omit() |> 
@@ -558,7 +559,7 @@ mean(stability_publications_growth_rate |>
 
 # Country production analysis
 
-## Table 2
+## Table 2 - Country production
 
 ```{r}
 wos_scopus_countries <- 
@@ -617,14 +618,29 @@ Production per country
 ```{r}
 table_2a <- 
   wos_scopus_countries |> 
-  count(AU_CO, sort = TRUE)
+  select(AU_CO) |> 
+  group_by(AU_CO) |> 
+  summarise(count_co = n()) |> 
+  mutate(percentage_co = count_co / sum(count_co) * 100,
+         percentage_co = round(percentage_co, digits = 2)) |> 
+  arrange(desc(count_co))
 
-table_2a
+table_2a 
+```
+
+Total percentage of the top 10 Countries
+
+```{r}
+table_2a |> 
+  slice(1:10) |> 
+  select(percentage_co) |> 
+  summarise(total_sum_per = sum(percentage_co)) |> 
+  pull()
 ```
 
 ### Table 2b - citations
 
-Citations recieved per country
+Citations received per country
 
 ```{r}
 table_2b <- 
@@ -632,9 +648,20 @@ table_2b <-
   select(AU_CO, TC) |> 
   group_by(AU_CO) |> 
   summarise(citation = sum(TC)) |> 
+  mutate(percentage_ci = citation / sum(citation) * 100) |> 
   arrange(desc(citation))
 
 table_2b
+```
+
+Total percentage of citation of the top 10 countries
+
+```{r}
+table_2b |> 
+  slice(1:10) |> 
+  select(percentage_ci) |> 
+  summarise(total_sum_per = sum(percentage_ci)) |> 
+  pull()
 ```
 
 ### Table 2c - Quartiles
@@ -669,4 +696,12 @@ table_2 <-
   slice(1:10)
 
 table_2
+```
+
+## Figure 2 - Country Collaboration
+
+Exporting data to biblioshiny
+
+```{r}
+write.xlsx(x = wos_scopus_tos$df, file = "output/wos_scopus.xlsx")
 ```
