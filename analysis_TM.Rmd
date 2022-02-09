@@ -3,6 +3,8 @@ title: "Data_Analisis_Scopus_WoS"
 author: "Sebastian Robledo"
 date: "1/28/2022"
 output: html_document
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
@@ -36,6 +38,70 @@ scopus <- bibliometrix::convert2df(here("data",
                                    format = "bibtex")
 
 wos_scopus_tos <- tosr_load("data/savedrecs_TM.txt", "data/scopus_TM.bib")
+
+```
+
+# Data tidying
+
+We will merge Scopus and WoS
+
+```{r}
+wos_scopus_unique <- 
+  scopus |> 
+  select(SR) |> 
+  bind_rows(wos |> 
+              select(SR)) |> 
+  unique() # There are 2042 unique registers
+```
+
+We add scopus and wos dataset
+
+```{r}
+wos_scopus_unique_scopus <- 
+  wos_scopus_unique |> 
+  left_join(scopus |> 
+              mutate(database = "scopus"), 
+            by = "SR") 
+
+wos_scopus_unique_wos <- 
+  wos_scopus_unique_scopus |>
+  filter(is.na(database)) |> 
+  select(SR) |> 
+  left_join(wos |> 
+              mutate(database = "wos"), 
+            by = "SR")
+```
+
+Unifying tags in scopus and wos
+
+```{r}
+wos_titles <- tibble(title = names(wos))
+scopus_titles <- tibble(title = names(scopus))
+
+unique_scopus_wos_titles <- inner_join(scopus_titles, wos_titles)
+```
+
+Selecting only unique tags in both datasets
+
+```{r}
+scopus_unique_titles <- 
+  wos_scopus_unique_scopus |> 
+  filter(!is.na(database)) |> 
+  select(unique_scopus_wos_titles |> 
+           pull())
+
+wos_unique_titles <- 
+  wos_scopus_unique_wos |> 
+  select(unique_scopus_wos_titles |> 
+           pull())
+```
+
+Merging both datasets scopus and wos
+
+```{r}
+scopus_wos_final <- 
+  scopus_unique_titles |> 
+  bind_rows(wos_unique_titles) # 2042 registers!!!!!
 ```
 
 # Data analysis
@@ -591,7 +657,7 @@ table_2c <-
 table_2c
 ```
 
-### Table 2
+### Table 2 - Final
 
 Merging all tables 2
 
