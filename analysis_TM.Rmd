@@ -23,6 +23,7 @@ library(here)
 library(lubridate)
 library(sjrdata)
 library(openxlsx)
+library(zoo)
 ```
 
 # Getting data
@@ -76,8 +77,8 @@ wos_scopus_unique_wos <-
 Unifying tags in scopus and wos
 
 ```{r}
-wos_titles <- tibble(title = names(wos))
-scopus_titles <- tibble(title = names(scopus))
+wos_titles <- tibble(title = names(wos_scopus_unique_wos))
+scopus_titles <- tibble(title = names(wos_scopus_unique_scopus))
 
 unique_scopus_wos_titles <- inner_join(scopus_titles, wos_titles)
 ```
@@ -318,7 +319,7 @@ Final Figure 1 with inkscape
 
 ![](figures/Figure_1_1.svg)
 
-# Descriptive analysis
+# Scientific Production
 
 ### Total publications
 
@@ -705,3 +706,153 @@ Exporting data to biblioshiny
 ```{r}
 write.xlsx(x = wos_scopus_tos$df, file = "output/wos_scopus.xlsx")
 ```
+
+# Academic Social Network
+
+We need to extract the edgelist from scopus and their references
+
+```{r}
+asn_scopus_1 <- 
+  scopus_wos_final |> 
+  filter(database == "scopus") |> 
+  mutate(ID_TOS = str_extract(SR, ".*,"))
+
+asn_scopus_ref <- 
+  asn_scopus_1 |> 
+  select(CR) |> 
+  separate_rows(CR, sep = "; ") |> 
+  mutate(lastname = sub("\\., .*", "", CR),
+         lastname = sub(",", "", lastname),
+         lastname = sub("\\.", "", lastname),
+         year = str_extract(CR, "\\(([0-9]{4})\\)"),
+         year = str_remove_all(year, "\\(|\\)")) |> 
+    mutate(lastname = str_replace(lastname, 
+                                pattern = "\\.", 
+                                replacement = ""),
+         ID_TOS = paste0(lastname, ", ", year, ",")) |> 
+  select(ID_TOS, CR)
+
+edgelist_scopus_ref_dummy <- 
+  tibble(Source = as.character(),
+         Target = as.character(),
+         year = as.character())
+for (i in 1:length(asn_scopus_ref$CR)) {
+  
+  df_1 <- 
+    asn_scopus_ref |> 
+    select(CR) |> 
+    slice(i) |>
+    mutate(year_2 = str_extract(CR, "\\([0-9]{4}\\)"),
+           year_1 = str_remove(year_2, "\\("),
+           year = str_remove(year_1, "\\)"),
+           authors_2 = str_remove(CR, 
+                                  "\\([0-9]{4}\\) .*"),
+           authors_1 = str_extract(authors_2,
+                                   ".*\\.,"),
+           authors = str_replace_all(authors_1,
+                                     "\\.", 
+                                     replacement = "")) |> 
+    select(authors, year) |> 
+    separate_rows(authors, sep = ", ") |> 
+    mutate(authors = str_replace(authors, ",", ""))
+    
+  df_2 <- 
+    df_1 |> 
+    select(authors) |> 
+    pull() |> 
+    zoo::rollapply(2, by=2, c) |> 
+    as_tibble() |> 
+    unite(authors, sep = " ") |> 
+    mutate(authors = str_replace(authors, "(?<= [[:alpha:]]).*", ""))
+  
+  if (dim(df_2)[1] >= 2) {
+    
+    df_3 <- 
+      df_2 |> 
+      pull() |> 
+      combn(2, simplify = FALSE) |> 
+      as_tibble(.name_repair = "minimal") |> 
+      t() |> 
+      data.frame() |> 
+      dplyr::rename(Source = 1, 
+                    Target = 2)
+    
+    df_4 <- 
+      df_3 |> 
+      bind_cols(df_1 |> 
+                  select(year) |> 
+                  unique())
+    
+    edgelist_scopus_ref_dummy <- 
+      edgelist_scopus_ref_dummy |> 
+      bind_rows(df_4) 
+    
+  }
+}
+
+edgelist_scopus_ref <- edgelist_scopus_ref_dummy |> 
+  filter(!str_detect(Source, "[0-9]"),
+         !str_detect(Target, "[0-9]")) |> 
+  mutate(year = as.numeric(year))
+```
+
+```{r}
+dummy <- 
+  edgelist_scopus_ref_dummy |> 
+  filter(!str_detect(Source, "[0-9]"),
+         !str_detect(Target, "[0-9]")) |> 
+  mutate(year = as.numeric(year))
+
+dummy_tbl_graph <- 
+  dummy |> 
+  graph_from_data_frame(directed = FALSE ) |> 
+  tidygraph::as_tbl_graph() |> 
+  activate(nodes) |> 
+  mutate(degree = centrality_degree())
+
+
+dummy_tbl_graph |> 
+  activate(nodes) |> 
+  data.frame() |> View()
+  arrange(desc(degree)) |> 
+  slice(1:10)
+
+david_blei_1 <- 
+  dummy_tbl_graph |> 
+  activate(edges) |> 
+  data.frame() |> 
+  filter(from == 14) |> 
+  select(year)
+
+david_blei_2 <- 
+  dummy_tbl_graph |> 
+  activate(edges) |> 
+  data.frame() |> 
+  filter(to == 14) |> 
+  select(year)
+
+david_blei_1 <- 
+  edgelist_scopus_ref_dummy |> 
+  filter(Target == "BLEI D") |> 
+  select(year)
+
+david_blei_2 <- 
+  edgelist_scopus_ref_dummy |> 
+  filter(Source == "BLEI D") |> 
+  select(year)
+
+david_blei <- 
+  david_blei_1 |> 
+  bind_rows(david_blei_2) |> 
+  count(year, sort = TRUE) |> 
+  na.omit()
+
+david_blei |> 
+  ggplot(aes(x = year, y = n)) +
+  geom_line(aes(group = 1)) + 
+  geom_point()
+  
+```
+
+
+
