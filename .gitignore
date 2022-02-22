@@ -43,3 +43,4 @@ Icon*
 *.csv
 *.xlsx
 *.db
+*.graphml
