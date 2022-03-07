@@ -1920,8 +1920,8 @@ Creating the Journal Citation Network from Scopus
 
 ```{r}
 scopus_ref_journal <- # We have all the journals from main source
-  scopus_wos_final |> 
-  filter(database %in% "scopus") |> 
+  wos_scopus_tos$df |> 
+  filter(ref_type %in% "scopus") |> 
   select(CR) |> 
   separate_rows(CR, sep = ";") |> 
   mutate(SO = str_remove(CR,
@@ -1973,8 +1973,8 @@ scopus_journal_citation <-
 
 ```{r}
 wos_ref_journal <-
-  scopus_wos_final |> 
-  filter(database %in% "wos") |> 
+  wos_scopus_tos$df  |> 
+  filter(ref_type %in% "wos") |> 
   select(CR, JI) |> 
   mutate(JI = str_remove_all(JI, "\\.")) |> 
   separate_rows(CR, sep = ";") |> 
@@ -2031,7 +2031,8 @@ journal_citation_graph_weighted_tbl_small <-
   journal_citation_graph_weighted_tbl |> 
   activate(nodes) |> 
   filter(degree >= 1) |> 
-  activate(edges)
+  activate(edges) |> 
+  filter(weight != 1)
 
 communities <- 
   journal_citation_graph_weighted_tbl_small |> 
@@ -2159,38 +2160,57 @@ jc_com <-
   jc_com_1 |> 
   bind_rows(jc_com_2,
             jc_com_3,
-            jc_com_4,
-            jc_com_5,
-            jc_com_6,
-            jc_com_7,
-            jc_com_8,
-            jc_com_9,
-            jc_com_10
+            # jc_com_4,
+            # jc_com_5,
+            # jc_com_6,
+            # jc_com_7,
+            # jc_com_8,
+            # jc_com_9,
+            # jc_com_10
             )
 ```
 
 ## Filtering and plotting the journal citatio nnetwork
 
 ```{r}
-journal_citation_graph_weighted_tbl_small_fig |> 
+# journal_citation_graph_weighted_tbl_small_fig_gephi <- 
+  journal_citation_graph_weighted_tbl_small_fig |> 
   activate(nodes) |> 
-  filter(name %in% jc_com$name) |> 
-  ggraph() +
+  filter(name %in% jc_com$name) |>
+  mutate(degree = centrality_degree()) |> 
+  filter(degree != 0) |> 
+  ggraph(layout = "graphopt") +
   geom_edge_link(width = 1,
                  colour = "lightgray") +
   geom_node_point(aes(color = factor(community), 
                       size = degree)) +
+  
+  geom_node_text(aes(label = name), repel = TRUE) +
   theme_graph()
 
 ```
 
-
-### testing results with gephi 
+### Export graph to gephi 
 
 ```{r}
-journal_citation_graph_weighted_tbl_small_fig |> 
+nodes <- 
+  journal_citation_graph_weighted_tbl_small_fig_gephi |> 
   activate(nodes) |> 
-  filter(name %in% jc_com$name) 
+  as_tibble() |> 
+  rename(author = name) |> 
+  rownames_to_column("name")
+
+edges <- 
+  journal_citation_graph_weighted_tbl_small_fig_gephi |> 
+  activate(edges) |> 
+  as_tibble()
+
+
+graph_from_data_frame(d = edges, vertices = nodes, directed = FALSE) |> 
+  write.graph(here("output",
+                   "journal_citation_graph.graphml"),
+              "graphml")
+
 ```
 
 
