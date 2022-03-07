@@ -45,3 +45,4 @@ Icon*
 *.db
 *.graphml
 *.bib
+topic_modeling.db
