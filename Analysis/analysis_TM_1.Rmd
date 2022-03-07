@@ -44,9 +44,6 @@ wos_scopus_tos <- tosr_load("data/savedrecs_TM.txt", "data/scopus_TM.bib")
 
 ```
 
-
-
-
 # Data tidying
 
 We will merge Scopus and WoS
@@ -110,7 +107,7 @@ scopus_wos_final <-
   bind_rows(wos_unique_titles) # 2042 registers!!!!!
 ```
 
-# Database 
+# Database
 
 ```{r}
 con <- DBI::dbConnect(RSQLite::SQLite(),                                               
@@ -135,7 +132,6 @@ dbListFields(con, "scopus_wos_final")
 ```{r}
 dbDisconnect(con)
 ```
-
 
 # Data analysis
 
@@ -1106,7 +1102,6 @@ wos_author <- # 1339 - 3
 
 ### 4. Merging main with refs dois with names
 
-
 ```{r}
 #################################################################
 #### Uni?n de los datos de WoS y de las referencias de estos ####
@@ -1156,7 +1151,6 @@ wos_author_removed <-
   wos_author_ref |> 
   filter(!(doi %in% dois_to_remove$doi))
 ```
-
 
 ```{r}
 ###########################
@@ -1240,7 +1234,6 @@ asn_TM_no_years <-
   
 ```
 
-
 ## ASN stats
 
 Filtering the connected graph and some stats - degree and louvain
@@ -1255,7 +1248,7 @@ asn_TM_connected <-
          community = as.factor(group_louvain()))
 ```
 
-Plot size  of each community
+Plot size of each community
 
 ```{r}
 asn_TM_connected |> 
@@ -1285,7 +1278,6 @@ asn_TM_connected |>
         axis.title.x = element_text(size = 20),
         axis.title.y = element_text(size = 20)) 
 ```
-
 
 ### Figure 1c Ploting longitudinal data of ASN
 
@@ -1355,8 +1347,7 @@ fig_1c_nodes |>
   scale_x_continuous(breaks = seq(2000, 2020, by = 1))
 ```
 
-
-Filtering only the top 10 nodes with best degree in the first 6 clusters. 
+Filtering only the top 10 nodes with best degree in the first 6 clusters.
 
 ```{r}
 asn_TM_connected_1 <- 
@@ -1427,7 +1418,6 @@ asn_TM_connected_6 <-
 
 ```
 
-
 Saving the nodes we're gonna show
 
 ```{r}
@@ -1478,7 +1468,6 @@ nodes_selected_10 <-
 
 ```
 
-
 Filtering selected nodes
 
 ```{r}
@@ -1502,7 +1491,6 @@ asn_TM_selected_nodes |>
   geom_node_text(aes(label = name), repel = TRUE) +
   theme_graph()
 ```
-
 
 Exporting graph
 
@@ -1555,7 +1543,7 @@ asn_igraph_subset |>
               "graphml")
 ```
 
-The graph is super big! We'll 
+The graph is super big! We'll
 
 Creating the weighted network of academic social network
 
@@ -1607,7 +1595,6 @@ asn_graph_tbl |>
   count(cluster) |> 
   ggplot(aes(x = n))
 ```
-
 
 Creating the academic social network with year
 
@@ -1738,9 +1725,11 @@ reorder(cluster, count)
   
 ```
 
-Academic Social Network from Scopus and WoS
+# Academic Social Network from Scopus and WoS
 
-```{r}
+## Cluster 1
+
+```{r, echo=FALSE}
 asn_wos_scopus_csv <-
   read_csv("output/asn_wos_scopus.csv")
 
@@ -1749,6 +1738,175 @@ asn_graph <-
   graph_from_data_frame(directed = FALSE) 
 ```
 
+Cluster 1 - Li, Ximing egonetwork analysis
+
+```{r}
+li_ximing_scopus <- 
+  bibliometrix::convert2df(file = here("data",
+                                       "Li Ximing.bib"),
+                           dbsource = "scopus", 
+                           format = "bibtex"
+                           )
+li_ximing_ego_network <- 
+  li_ximing_scopus |> 
+  select(SR, AU) |> 
+  separate_rows(AU, sep = ";") |> 
+  group_by(SR) |> 
+  filter(n() > 1) |> 
+  expand(from = AU, to = AU) |> 
+  filter(from != to) |> 
+  mutate(PY = str_extract(SR, pattern = "[0-9]{4}"))
+```
+
+Just checking
+
+```{r}
+li_ximing_ego_network |> 
+  select(from, to) |> 
+  igraph::graph_from_data_frame(directed = FALSE) |> 
+  simplify() |>
+  write_graph(here("output", 
+                   "li_ximing.graphml"), 
+              "graphml")
+  as_tbl_graph() |> 
+  activate(edges) |> 
+  as.data.frame()
+  
+```
+
+Li, Yuefeng 
+
+```{r}
+li_yufeng_scopus <- 
+  convert2df(file = here("data", "Li Yuefeng.bib"), 
+             dbsource = "scopus", 
+             format = "bibtex") 
+```
+
+Creating the edgelist
+
+```{r}
+li_yufeng_egonetwork <- 
+  li_yufeng_scopus |> 
+  select(AU, SR) |> 
+  separate_rows(AU, sep = ";") |> 
+  group_by(SR) |> 
+  expand(from = AU, to = AU) |> 
+  filter(from != to) |>
+  ungroup() |> 
+  select(-SR) |> 
+  graph_from_data_frame(directed = FALSE) |> 
+  simplify() |> 
+  get.edgelist() |> 
+  data.frame() |> 
+  rename(from = X1, 
+         to = X2)
+```
+
+Counting Li Yufeng friends 
+
+```{r}
+li_yufeng_friends <- 
+  li_yufeng_egonetwork |>
+  select(friend = from) |> 
+  bind_rows(li_yufeng_egonetwork |> 
+              select(friend = to)) |> 
+  filter(friend != "LI Y") |> 
+  count(friend, sort = TRUE)
+```
+
+
+Yang Liu
+
+```{r}
+yang_liu_scopus <- 
+  convert2df(file = here("data", "Yang Liu.bib"), 
+             dbsource = "scopus", 
+             format = "bibtex") 
+```
+
+Creating the edgelist
+
+```{r}
+yang_liu_egonetwork <- 
+  yang_liu_scopus |> 
+  select(AU, SR) |> 
+  separate_rows(AU, sep = ";") |> 
+  group_by(SR) |> 
+  expand(from = AU, to = AU) |> 
+  filter(from != to) |>
+  ungroup() |> 
+  select(-SR) |> 
+  graph_from_data_frame(directed = FALSE) |> 
+  simplify() |> 
+  get.edgelist() |> 
+  data.frame() |> 
+  rename(from = X1, 
+         to = X2)
+```
+
+Counting Li Yufeng friends 
+
+```{r}
+yang_liu_friends <- 
+  yang_liu_egonetwork |>
+  select(friend = from) |> 
+  bind_rows(li_yufeng_egonetwork |> 
+              select(friend = to)) |> 
+  filter(friend != "LIU Y") |> 
+  count(friend, sort = TRUE)
+```
+
+## Cluster 2
+
+Sungyoung Lee
+
+```{r}
+sungyoung_lee_scopus <- 
+  convert2df(file = here("data", "Sungyoung Lee.bib"), 
+             dbsource = "scopus", 
+             format = "bibtex") 
+```
+
+Creating the edgelist
+
+```{r}
+sungyoung_lee_egonetwork <- 
+  sungyoung_lee_scopus |> 
+  select(AU, SR, TI) |> 
+  separate_rows(AU, sep = ";") |> 
+  group_by(SR) |> 
+  expand(from = AU, to = AU) |> 
+  filter(from != to) |>
+  left_join(sungyoung_lee_scopus |> 
+              select(SR, TI), 
+            by = "SR")
+  ungroup() |> 
+  select(-SR) |> 
+  graph_from_data_frame(directed = FALSE) |> 
+  simplify() |> 
+  get.edgelist() |> 
+  data.frame() |> 
+  rename(from = X1, 
+         to = X2)
+```
+
+Counting Li Yufeng friends 
+
+```{r}
+sungyoung_lee_friends <- 
+  sungyoung_lee_egonetwork |>
+  select(friend = from) |> 
+  bind_rows(li_yufeng_egonetwork |> 
+              select(friend = to)) |> 
+  filter(friend != "LEE S") |> 
+  count(friend, sort = TRUE)
+```
+
+
+
+
+## Cluster 3
 
 # Others
 
