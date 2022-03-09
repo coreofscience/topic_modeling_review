@@ -2274,3 +2274,11 @@ david_blei |>
   geom_point()
   
 ```
+
+
+```{r}
+write_csv(wos_scopus_tos$df, "wos_scopus.csv")
+
+write
+```
+
