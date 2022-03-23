@@ -115,7 +115,7 @@ scopus_wos_final <-
 con <- DBI::dbConnect(RSQLite::SQLite(),                                               
                       here("",
                            "topic_modeling.db") 
-                      )
+)
 
 dbListTables(con)
 ```
@@ -147,7 +147,14 @@ wos_anual_production <-
   na.omit() |> 
   filter(PY >= 2000,
          PY < year(today())) |> 
-  mutate(ref_type = "wos") 
+  mutate(ref_type = "wos") |> 
+  bind_rows(tibble(PY = c(2004, 
+                          2005, 
+                          2006, 
+                          2007, 
+                          2008),
+                   n = 0, 
+                   ref_type = "wos"))
 
 scopus_anual_production  <- 
   scopus |> 
@@ -160,34 +167,76 @@ scopus_anual_production  <-
   bind_rows(tibble(PY = 2007, n = 0, ref_type = "scopus"))
 
 total_anual_production <- 
-  scopus_wos_final |> 
+  wos_scopus_tos$df |> 
   select(PY) |> 
   count(PY, sort = TRUE) |> 
   na.omit() |> 
   filter(PY >= 2000,
          PY < year(today())) |>
   mutate(ref_type = "total") |> 
-  bind_rows(tibble(PY = 2007, n = 0, ref_type = "total"))
+  bind_rows(tibble(PY = 2007, 
+                   n = 0, 
+                   ref_type = "total")) |> 
+  arrange(desc(PY))
 
 wos_scopus_total_annual_production <- 
   wos_anual_production |> 
   bind_rows(scopus_anual_production,
             total_anual_production) 
 
-figure_1_data <- 
-  wos_scopus_total_annual_production |> 
-  mutate(PY = replace_na(PY, replace = 0)) |> 
-  pivot_wider(names_from = ref_type, 
-              values_from = n) |> 
+# Checking results of total
+
+wos_scopus_total_annual_production_dummy <- 
+  total_anual_production |> 
+  rename(n_total = n,
+         ref_type_total = ref_type) |> 
+  left_join(wos_anual_production |> 
+              rename(n_wos = n,
+                     ref_type_wos = ref_type) ) |> 
+  left_join(scopus_anual_production |> 
+              rename(n_scopus = n,
+                     ref_type_scopus = ref_type)) |> 
+  mutate(total = if_else(n_total < n_wos | n_total < n_scopus, 
+                         n_scopus, # it could be improved
+                         n_total))
+
+wos_scopus_total_annual_production_total <- 
+  wos_scopus_total_annual_production_dummy |> 
+  select(PY, 
+         n = total,
+         ref_type = ref_type_total)
+
+wos_scopus_total_annual_production_scopus <- 
+  wos_scopus_total_annual_production_dummy |> 
+  select(PY, 
+         n = n_scopus,
+         ref_type = ref_type_scopus)
+
+wos_scopus_total_annual_production_wos <- 
+  wos_scopus_total_annual_production_dummy |> 
+  select(PY, 
+         n = n_wos,
+         ref_type = ref_type_wos)
+
+wos_scopus_total_annual_production <- 
+  wos_scopus_total_annual_production_total |> 
+  bind_rows(wos_scopus_total_annual_production_scopus,
+            wos_scopus_total_annual_production_wos) 
+
+figure_1_data <-
+  wos_scopus_total_annual_production |>
+  mutate(PY = replace_na(PY, replace = 0)) |>
+  pivot_wider(names_from = ref_type,
+              values_from = n) |>
   arrange(desc(PY))
 
-wos_scopus_total_annual_production |> 
+wos_scopus_total_annual_production |>
   ggplot(aes(x = PY, y = n, color = ref_type)) +
   geom_line() +
-  labs(title = "Annual Scientific Production", 
+  labs(title = "Annual Scientific Production",
        x = "years",
        y = "papers") +
-  theme(plot.title = element_text(hjust = 0.5)) 
+  theme(plot.title = element_text(hjust = 0.5))
 ```
 
 I would like to create a bar graph of WoS and Scopus data
@@ -203,7 +252,13 @@ TC_wos <-
   group_by(PY) |> 
   summarise(TC_sum = sum(TC)) |> 
   arrange(desc(PY)) |> 
-  na.omit() 
+  na.omit() |> 
+  bind_rows(tibble(PY = c(2004, 
+                          2005, 
+                          2006, 
+                          2007, 
+                          2008),
+                   TC_sum = 0))
 ```
 
 Time Cited from WoS
@@ -215,10 +270,29 @@ TC_scopus <-
   group_by(PY) |> 
   summarise(TC_sum = sum(TC)) |> 
   arrange(desc(PY)) |> 
-  na.omit() 
+  na.omit() |> 
+  bind_rows(tibble(PY = 2007, TC_sum = 0))
 ```
 
-# Figure 1
+Time cited all
+
+```{r}
+TC_all <- 
+  TC_scopus |> 
+  left_join(TC_wos, 
+            by = "PY", 
+            suffix = c("_wos", 
+                       "_scopus")) |> 
+  replace_na(replace = list(TC_sum_scopus = 0)) |> 
+  mutate(TC_sum_all = TC_sum_wos + TC_sum_scopus,
+         TC_total = sum(TC_sum_all),
+         TC_percentage = round(TC_sum_all/TC_total, digits = 2)) |> 
+  select(PY, TC_sum_all, TC_percentage) |> 
+  filter(PY != 2022) |> 
+  arrange(desc(PY))
+```
+
+# 3.1.1 Scientific Production
 
 ## Figure 1a
 
@@ -295,6 +369,20 @@ figure_1b
 
 ```
 
+## Figure 1b_1
+
+```{r}
+wos_scopus_total_annual_production_dummy |> 
+  ggplot(aes(x = PY)) +
+  geom_bar(stat = "identity",
+           aes(y = n_total)) +
+  geom_line(aes(y = total)) +
+  scale_y_continuous(
+    name = "First Axis",
+    sec.axis = sec_axis(~., name = "Second Axis"), 
+  )
+```
+
 ## Figure 1c
 
 ```{r}
@@ -348,9 +436,7 @@ figure_1c
 
 Final Figure 1 with inkscape
 
-![](figures/Figure_1_1.svg)
-
-# Scientific Production
+![](images/Figure_1_a.svg)
 
 ### Total publications
 
@@ -558,7 +644,7 @@ stability_stage_publications <-
   pull()
 
 stability_stage_publications
-  
+
 ```
 
 Percentage
@@ -589,7 +675,7 @@ mean(stability_publications_growth_rate |>
      na.rm = TRUE)
 ```
 
-# Country production analysis
+# 3.1.2 Country analysis
 
 ## Table 2 - Country production
 
@@ -738,7 +824,361 @@ Exporting data to biblioshiny
 write.xlsx(x = wos_scopus_tos$df, file = "output/wos_scopus.xlsx")
 ```
 
-# Academic Social Network
+# 3.1.3 Journal Analysis
+
+## Scopus Journal Citation Network
+
+Getting JOURNAL names 
+
+```{r}
+journals_all_abbr <- # From Scimago data
+  journalabbr::abbrTable |>
+  select(journal, journal_abbr) |>
+  mutate(journal_abbr = str_remove_all(journal_abbr, "\\.")) |>
+  mutate(journal_abbr = str_to_upper(journal_abbr)) |> 
+  select(journal_abbr) |> 
+  unique()
+```
+
+
+Creating the Journal Citation Network from Scopus
+
+```{r}
+journal_citation_edgelist <- 
+  wos_scopus_tos$df |> 
+  select(JI_main = JI, CR) |> 
+  mutate(JI_main = str_remove_all(JI_main, "\\.")) |> 
+  separate_rows(CR, sep = ";") |> 
+  mutate(JI_ref = str_remove(CR, ".*([0-9]{4}), "), 
+         JI_ref = str_remove(JI_ref, ", .*")) |> 
+  filter(!str_detect(JI_ref, "[0-9]")) |> 
+  select(-CR) |> 
+  na.omit() |> 
+  mutate(JI_ref = str_trim(JI_ref, 
+                           side = "both")) |> 
+  inner_join(journals_all_abbr, 
+             by = c("JI_ref" = "journal_abbr")) |> 
+  filter(!(JI_ref == "")) |> 
+  filter(!(JI_main == JI_ref))
+```
+
+Creating the graph object
+
+```{r}
+journal_citation_graph_weighted <- 
+  graph_from_adjacency_matrix(as.matrix(get.adjacency(graph.data.frame(journal_citation_edgelist))),
+                              weighted = TRUE, 
+                              mode = "undirected", 
+                              diag = TRUE) |> 
+  simplify() |> 
+  giant.component()
+
+journal_citation_graph_weighted_tbl <- 
+  journal_citation_graph_weighted |> 
+  as_tbl_graph() |> 
+  activate(nodes) |> 
+  mutate(degree = centrality_degree(),
+         community = tidygraph::group_louvain())
+```
+
+
+## WoS Journal Citation Network
+
+```{r}
+# wos_ref_journal <-
+#   wos_scopus_tos$df  |> 
+#   filter(ref_type %in% "wos") |> 
+#   select(JI_main = JI, CR) |> slice(1)
+#   mutate(JI_main = str_remove_all(JI_main, "\\.")) |> 
+#   separate_rows(CR, sep = ";") |> 
+#   mutate(JI_ref = str_remove(CR, ".*[0-9]{4}, ")) |> 
+#   mutate(JI_ref = str_remove(JI_ref, ",.*")) |> 
+#   filter(!str_detect(JI_ref, "[0-9]")) |> 
+#   select(-CR) |> 
+#   filter(!is.na(JI_ref))
+```
+
+```{r}
+# scopus_ref_journal <- # We have all the journals from main source
+#   wos_scopus_tos$df |> 
+#   filter(ref_type %in% "scopus") |> 
+#   select(CR, SO, JI) |> 
+#   separate_rows(CR, sep = ";") |> 
+#   mutate(SO = str_remove(CR,
+#                          ".*\\([0-9]{4}\\)")) |> 
+#   mutate(SO = str_remove(string = SO, ",.*")) |> 
+#   mutate(SO =str_trim(string = SO, side = "both")) |> View()
+# filter(SO != "") |> 
+#   mutate(SO = str_remove_all(string = SO, pattern = "\\."))
+# 
+# journals_all_abbr <- # From Scimago data
+#   journalabbr::abbrTable |> 
+#   select(journal, journal_abbr) |> 
+#   mutate(journal_abbr = str_remove_all(journal_abbr, "\\.")) |> 
+#   mutate(journal_abbr = str_to_upper(journal_abbr))
+# 
+# journals_all_full <- 
+#   journalabbr::abbrTable |> 
+#   select(journal, journal_abbr) |> 
+#   # mutate(journal = str_remove_all(journal_abbr, "\\.")) |> 
+#   mutate(journal = str_to_upper(journal))
+# 
+# # Merging abbrevite name to scopus_ref_journal
+# scopus_ref_journal_1 <- 
+#   scopus_ref_journal |> 
+#   left_join(journals_all_abbr,by = c("SO" = "journal_abbr"))
+# 
+# scopus_ref_journal_2 <- 
+#   scopus_ref_journal |> 
+#   left_join(journals_all_full,by = c("SO" = "journal")) |> 
+#   # filter(!is.na(journal_abbr)) |> 
+#   mutate(journal_abbr = str_remove_all(journal_abbr, "\\.")) |> 
+#   mutate(journal_abbr = str_to_upper(journal_abbr)) |> 
+#   mutate(journal_abbr = if_else(is.na(journal_abbr), SO, journal_abbr)) |> 
+#   unique() |> 
+#   select(CR, SO_REF = journal_abbr) 
+# # We need abbr from journal to compare with the main dataset (data_tidied)
+# scopus_journal_citation <- 
+#   wos_scopus_tos$df  |> 
+#   dplyr::filter(database %in% "scopus") |> 
+#   select(SR, CR, JI) |> 
+#   mutate(JI = str_remove_all(JI, "\\.")) |> 
+#   separate_rows(CR, sep = ";") |> 
+#   left_join(scopus_ref_journal_2, by = c("CR" = "CR")) |> 
+#   select(JI, SO_REF) |>
+#   filter(!is.na(SO_REF)) 
+```
+
+## Scopus + WoS Journal Citation Network
+
+Merging both datasets WoS and Scopus, and creating the graph
+
+```{r}
+# journal_citation_graph <- 
+#   scopus_journal_citation |> 
+#   bind_rows(wos_ref_journal) |> 
+#   filter(!(JI == SO_REF)) |> 
+#   add_count(JI, SO_REF) 
+# graph.data.frame(directed = TRUE) |> 
+# simplify() |> 
+# giant.component()
+# journal_citation_graph_weighted <- 
+#   graph_from_adjacency_matrix(as.matrix(get.adjacency(graph.data.frame(journal_citation_graph))), weighted = TRUE, mode = "undirected", diag = TRUE) |> 
+#   simplify() |> 
+#   giant.component()
+# 
+# journal_citation_graph_weighted_tbl <- 
+#   journal_citation_graph_weighted |> 
+#   as_tbl_graph() |> 
+#   activate(nodes) |> 
+#   mutate(degree = centrality_degree(),
+#          community = tidygraph::group_louvain())
+
+# Saving resutls in database 
+
+# dbWriteTable(con, 
+#              "journal_citation_network_nodes", 
+#              journal_citation_graph_weighted_tbl |> 
+#                activate(nodes) |> 
+#                data.frame())
+# 
+# dbWriteTable(con, 
+#              "journal_citation_network_edges", 
+#              journal_citation_graph_weighted_tbl |> 
+#                activate(edges) |> 
+#                data.frame())
+
+
+# Filtering the network to make it more readable in a figure
+
+journal_citation_graph_weighted_tbl_small <- 
+  journal_citation_graph_weighted_tbl |> 
+  activate(nodes) |> 
+  filter(degree >= 1) |> 
+  activate(edges) |> 
+  filter(weight != 1)
+
+communities <- 
+  journal_citation_graph_weighted_tbl_small |> 
+  activate(nodes) |> 
+  data.frame() |> 
+  count(community, sort = TRUE) |> 
+  slice(1:10) |> 
+  select(community) |> 
+  pull()
+
+# Filtering biggest communities 
+
+journal_citation_graph_weighted_tbl_small_fig <- 
+  journal_citation_graph_weighted_tbl_small |> 
+  activate(nodes) |> 
+  filter(community %in% communities)
+```
+
+## Figure 4 Journal Citation Network
+
+Selecting nodes to show
+
+```{r}
+jc_com_1 <- 
+  journal_citation_graph_weighted_tbl_small_fig |> 
+  activate(nodes) |> 
+  filter(community == communities[1]) |> 
+  mutate(degree = centrality_degree()) |> 
+  arrange(desc(degree)) |> 
+  slice(1:10) |> 
+  data.frame() |> 
+  select(name)
+
+jc_com_2 <- 
+  journal_citation_graph_weighted_tbl_small_fig |> 
+  activate(nodes) |> 
+  filter(community == communities[2]) |> 
+  mutate(degree = centrality_degree()) |> 
+  arrange(desc(degree)) |> 
+  slice(1:10) |> 
+  data.frame() |> 
+  select(name)
+
+jc_com_3 <- 
+  journal_citation_graph_weighted_tbl_small_fig |> 
+  activate(nodes) |> 
+  filter(community == communities[3]) |> 
+  mutate(degree = centrality_degree()) |> 
+  arrange(desc(degree)) |> 
+  slice(1:10) |> 
+  data.frame() |> 
+  select(name)
+
+jc_com_4 <- 
+  journal_citation_graph_weighted_tbl_small_fig |> 
+  activate(nodes) |> 
+  filter(community == communities[4]) |> 
+  mutate(degree = centrality_degree()) |> 
+  arrange(desc(degree)) |> 
+  slice(1:10) |> 
+  data.frame() |> 
+  select(name)
+
+jc_com_5 <- 
+  journal_citation_graph_weighted_tbl_small_fig |> 
+  activate(nodes) |> 
+  filter(community == communities[5]) |> 
+  mutate(degree = centrality_degree()) |> 
+  arrange(desc(degree)) |> 
+  slice(1:10) |> 
+  data.frame() |> 
+  select(name)
+
+jc_com_6 <- 
+  journal_citation_graph_weighted_tbl_small_fig |> 
+  activate(nodes) |> 
+  filter(community == communities[6]) |> 
+  mutate(degree = centrality_degree()) |> 
+  arrange(desc(degree)) |> 
+  slice(1:10) |> 
+  data.frame() |> 
+  select(name)
+
+jc_com_7<- 
+  journal_citation_graph_weighted_tbl_small_fig |> 
+  activate(nodes) |> 
+  filter(community == communities[7]) |> 
+  mutate(degree = centrality_degree()) |> 
+  arrange(desc(degree)) |> 
+  slice(1:10) |> 
+  data.frame() |> 
+  select(name)
+
+jc_com_8 <- 
+  journal_citation_graph_weighted_tbl_small_fig |> 
+  activate(nodes) |> 
+  filter(community == communities[8]) |> 
+  mutate(degree = centrality_degree()) |> 
+  arrange(desc(degree)) |> 
+  slice(1:10) |> 
+  data.frame() |> 
+  select(name)
+
+jc_com_9 <- 
+  journal_citation_graph_weighted_tbl_small_fig |> 
+  activate(nodes) |> 
+  filter(community == communities[9]) |> 
+  mutate(degree = centrality_degree()) |> 
+  arrange(desc(degree)) |> 
+  slice(1:10) |> 
+  data.frame() |> 
+  select(name)
+
+jc_com_10 <- 
+  journal_citation_graph_weighted_tbl_small_fig |> 
+  activate(nodes) |> 
+  filter(community == communities[10]) |> 
+  mutate(degree = centrality_degree()) |> 
+  arrange(desc(degree)) |> 
+  slice(1:10) |> 
+  data.frame() |> 
+  select(name)
+
+jc_com <- 
+  jc_com_1 |> 
+  bind_rows(jc_com_2,
+            jc_com_3,
+            # jc_com_4,
+            # jc_com_5,
+            # jc_com_6,
+            # jc_com_7,
+            # jc_com_8,
+            # jc_com_9,
+            # jc_com_10
+  )
+```
+
+## Filtering and plotting the journal citatio nnetwork
+
+```{r}
+# journal_citation_graph_weighted_tbl_small_fig_gephi <- 
+journal_citation_graph_weighted_tbl_small_fig |> 
+  activate(nodes) |> 
+  filter(name %in% jc_com$name) |>
+  mutate(degree = centrality_degree()) |> 
+  filter(degree != 0) |> 
+  ggraph(layout = "graphopt") +
+  geom_edge_link(width = 1,
+                 colour = "lightgray") +
+  geom_node_point(aes(color = factor(community), 
+                      size = degree)) +
+  
+  geom_node_text(aes(label = name), repel = TRUE) +
+  theme_graph()
+
+```
+
+### Export graph to gephi
+
+```{r}
+nodes <- 
+  journal_citation_graph_weighted_tbl_small_fig_gephi |> 
+  activate(nodes) |> 
+  as_tibble() |> 
+  rename(author = name) |> 
+  rownames_to_column("name")
+
+edges <- 
+  journal_citation_graph_weighted_tbl_small_fig_gephi |> 
+  activate(edges) |> 
+  as_tibble()
+
+
+graph_from_data_frame(d = edges, vertices = nodes, directed = FALSE) |> 
+  write.graph(here("output",
+                   "journal_citation_graph.graphml"),
+              "graphml")
+
+```
+
+
+# 3.1.4 Author Analysis
 
 ## Scopus
 
@@ -759,7 +1199,7 @@ asn_scopus_ref <-
          lastname = sub("\\.", "", lastname),
          year = str_extract(CR, "\\(([0-9]{4})\\)"),
          year = str_remove_all(year, "\\(|\\)")) |> 
-    mutate(lastname = str_replace(lastname, 
+  mutate(lastname = str_replace(lastname, 
                                 pattern = "\\.", 
                                 replacement = ""),
          ID_TOS = paste0(lastname, ", ", year, ",")) |> 
@@ -788,7 +1228,7 @@ for (i in 1:length(asn_scopus_ref$CR)) {
     select(authors, year) |> 
     separate_rows(authors, sep = ", ") |> 
     mutate(authors = str_replace(authors, ",", ""))
-    
+  
   df_2 <- 
     df_1 |> 
     select(authors) |> 
@@ -1213,7 +1653,7 @@ Merging both datasets
 edgelist_scopus_wos <- 
   edgelist_total_scopus |> 
   bind_rows(edgelist_wos_authors |> 
-             select(Source, Target, year))  # We can not remove duplicates
+              select(Source, Target, year))  # We can not remove duplicates
 
 edgelist_scopus_wos_no_years <- 
   edgelist_total_scopus |> 
@@ -1235,7 +1675,7 @@ asn_TM_no_years <-
   graph.data.frame(directed = FALSE) |> 
   simplify() |> 
   as_tbl_graph()
-  
+
 ```
 
 ## ASN stats
@@ -1297,7 +1737,7 @@ fig_1c_edges <-
   select(year, percentage)
 
 # Create a data frame with author and year 
-  
+
 fig_1c_nodes <- # 21 row 
   edgelist_scopus_wos |> 
   select(author = Source, year) |>
@@ -1340,7 +1780,7 @@ fig_1c_nodes |>
         axis.text.x = element_text(size = 15,
                                    colour = "black", 
                                    angle = 45, vjust = 0.5
-                                    ),
+        ),
         axis.title.x = element_text(size = 20),
         axis.title.y = element_text(size = 20),
         legend.text = element_text(size = "15"), 
@@ -1468,7 +1908,7 @@ nodes_selected_10 <-
             # nodes_community_4,
             # nodes_community_5,
             # nodes_community_6
-            )
+  )
 
 ```
 
@@ -1491,7 +1931,7 @@ asn_TM_selected_nodes |>
   geom_edge_link(width = 1, 
                  colour = "lightgray") +
   geom_node_point(aes(color = community, 
-                  size = degree)) +
+                      size = degree)) +
   geom_node_text(aes(label = name), repel = TRUE) +
   theme_graph()
 ```
@@ -1573,7 +2013,7 @@ author_cocitation_byproducts <-
                    directed = FALSE) |> 
   simplify() |> 
   giant.component()  
-  
+
 clusters_author_network <- 
   author_cocitation_byproducts |> 
   as.undirected(mode = "each") |> 
@@ -1583,7 +2023,7 @@ author_cocitation_byproducts_clusters <-
   author_cocitation_byproducts |> 
   set_vertex_attr(name = "cluster",
                   value = membership(clusters_author_network))
-  
+
 author_cocitation_byproducts_clusters |> summary()
 
 asn_graph_tbl <- 
@@ -1617,9 +2057,9 @@ links_table <- # 21 rows
   filter(year >= 2000) |> 
   dplyr::mutate(percentage = n/max(n))  |> 
   select(year, percentage)
-  
+
 # Create a data frame with author and year 
-  
+
 nodes_table <- # 21 row 
   edgelist_author_cocitation_wos_scopus_year |> 
   select(author = Source, year) |>
@@ -1676,7 +2116,7 @@ author_cocitation_byproducts <-
                    directed = FALSE) |> 
   simplify() |> 
   giant.component() 
-  
+
 clusters_author_network <- 
   author_cocitation_byproducts |> 
   as.undirected(mode = "each") |> 
@@ -1685,7 +2125,7 @@ author_cocitation_byproducts_clusters <-
   author_cocitation_byproducts |> 
   set_vertex_attr(name = "cluster",
                   value = membership(clusters_author_network))
-  
+
 author_cocitation_byproducts |> summary()
 ```
 
@@ -1695,8 +2135,8 @@ reorder(cluster, count)
 
 ```{r}
 # byproduct_san_clusters <- 
-  tibble(id = V(author_cocitation_byproducts_clusters)$name,
-         cluster = V(author_cocitation_byproducts_clusters)$cluster) |>
+tibble(id = V(author_cocitation_byproducts_clusters)$name,
+       cluster = V(author_cocitation_byproducts_clusters)$cluster) |>
   select(cluster) |> 
   add_count(cluster) |> 
   unique() |> 
@@ -1726,7 +2166,7 @@ reorder(cluster, count)
                                    colour = "black"),
         axis.title.x = element_text(size = 20),
         axis.title.y = element_text(size = 20)) 
-  
+
 ```
 
 ## Academic Social Network from Scopus and WoS
@@ -1750,7 +2190,7 @@ li_ximing_scopus <-
                                        "Li Ximing.bib"),
                            dbsource = "scopus", 
                            format = "bibtex"
-                           )
+  )
 li_ximing_ego_network <- 
   li_ximing_scopus |> 
   select(SR, AU) |> 
@@ -1772,13 +2212,13 @@ li_ximing_ego_network |>
   write_graph(here("output", 
                    "li_ximing.graphml"), 
               "graphml")
-  as_tbl_graph() |> 
+as_tbl_graph() |> 
   activate(edges) |> 
   as.data.frame()
-  
+
 ```
 
-Li, Yuefeng 
+Li, Yuefeng
 
 ```{r}
 li_yufeng_scopus <- 
@@ -1807,7 +2247,7 @@ li_yufeng_egonetwork <-
          to = X2)
 ```
 
-Counting Li Yufeng friends 
+Counting Li Yufeng friends
 
 ```{r}
 li_yufeng_friends <- 
@@ -1818,7 +2258,6 @@ li_yufeng_friends <-
   filter(friend != "LI Y") |> 
   count(friend, sort = TRUE)
 ```
-
 
 Yang Liu
 
@@ -1849,7 +2288,7 @@ yang_liu_egonetwork <-
          to = X2)
 ```
 
-Counting Li Yufeng friends 
+Counting Li Yufeng friends
 
 ```{r}
 yang_liu_friends <- 
@@ -1885,7 +2324,7 @@ sungyoung_lee_egonetwork <-
   left_join(sungyoung_lee_scopus |> 
               select(SR, TI), 
             by = "SR")
-  ungroup() |> 
+ungroup() |> 
   select(-SR) |> 
   graph_from_data_frame(directed = FALSE) |> 
   simplify() |> 
@@ -1895,7 +2334,7 @@ sungyoung_lee_egonetwork <-
          to = X2)
 ```
 
-Counting Li Yufeng friends 
+Counting Li Yufeng friends
 
 ```{r}
 sungyoung_lee_friends <- 
@@ -1907,312 +2346,7 @@ sungyoung_lee_friends <-
   count(friend, sort = TRUE)
 ```
 
-
-
-
 ## Cluster 3
-
-# Journal citation network
-
-## Scopus Journal Citation Network 
-
-Creating the Journal Citation Network from Scopus
-
-```{r}
-scopus_ref_journal <- # We have all the journals from main source
-  wos_scopus_tos$df |> 
-  filter(ref_type %in% "scopus") |> 
-  select(CR) |> 
-  separate_rows(CR, sep = ";") |> 
-  mutate(SO = str_remove(CR,
-                         ".*\\([0-9]{4}\\)")) |> 
-  mutate(SO = str_remove(string = SO, ",.*")) |> 
-  mutate(SO =str_trim(string = SO, side = "both")) |> 
-  filter(SO != "") |> 
-  mutate(SO = str_remove_all(string = SO, pattern = "\\."))
-
-journals_all_abbr <- # From Scimago data
-  journalabbr::abbrTable |> 
-  select(journal, journal_abbr) |> 
-  mutate(journal_abbr = str_remove_all(journal_abbr, "\\.")) |> 
-  mutate(journal_abbr = str_to_upper(journal_abbr))
-
-journals_all_full <- 
-  journalabbr::abbrTable |> 
-  select(journal, journal_abbr) |> 
-  # mutate(journal = str_remove_all(journal_abbr, "\\.")) |> 
-  mutate(journal = str_to_upper(journal))
-
-# Merging abbrevite name to scopus_ref_journal
-scopus_ref_journal_1 <- 
-  scopus_ref_journal |> 
-  left_join(journals_all_abbr,by = c("SO" = "journal_abbr"))
-
-scopus_ref_journal_2 <- 
-  scopus_ref_journal |> 
-  left_join(journals_all_full,by = c("SO" = "journal")) |> 
-  # filter(!is.na(journal_abbr)) |> 
-  mutate(journal_abbr = str_remove_all(journal_abbr, "\\.")) |> 
-  mutate(journal_abbr = str_to_upper(journal_abbr)) |> 
-  mutate(journal_abbr = if_else(is.na(journal_abbr), SO, journal_abbr)) |> 
-  unique() |> 
-  select(CR, SO_REF = journal_abbr) 
-# We need abbr from journal to compare with the main dataset (data_tidied)
-scopus_journal_citation <- 
-  scopus_wos_final |> 
-  dplyr::filter(database %in% "scopus") |> 
-  select(SR, CR, JI) |> 
-  mutate(JI = str_remove_all(JI, "\\.")) |> 
-  separate_rows(CR, sep = ";") |> 
-  left_join(scopus_ref_journal_2, by = c("CR" = "CR")) |> 
-  select(JI, SO_REF) |>
-  filter(!is.na(SO_REF)) 
-```
-
-## WoS Journal Citation Network 
-
-```{r}
-wos_ref_journal <-
-  wos_scopus_tos$df  |> 
-  filter(ref_type %in% "wos") |> 
-  select(CR, JI) |> 
-  mutate(JI = str_remove_all(JI, "\\.")) |> 
-  separate_rows(CR, sep = ";") |> 
-  mutate(SO_REF = str_remove(CR, ".*[0-9]{4}, ")) |> 
-  mutate(SO_REF = str_remove(SO_REF, ",.*")) |> 
-  filter(!str_detect(SO_REF, "[0-9]")) |> 
-  select(-CR) |> 
-  filter(!is.na(SO_REF))
-```
-
-## Scopus + WoS Journal Citation Network 
-
-Merging both datasets WoS and Scopus, and creting the graph
-
-```{r}
-journal_citation_graph <- 
-  scopus_journal_citation |> 
-  bind_rows(wos_ref_journal) |> 
-  filter(!(JI == SO_REF)) |> 
-  add_count(JI, SO_REF) 
-# graph.data.frame(directed = TRUE) |> 
-# simplify() |> 
-# giant.component()
-journal_citation_graph_weighted <- 
-  graph_from_adjacency_matrix(as.matrix(get.adjacency(graph.data.frame(journal_citation_graph))), weighted = TRUE, mode = "undirected", diag = TRUE) |> 
-  simplify() |> 
-  giant.component()
-
-journal_citation_graph_weighted_tbl <- 
-  journal_citation_graph_weighted |> 
-  as_tbl_graph() |> 
-  activate(nodes) |> 
-  mutate(degree = centrality_degree(),
-         community = tidygraph::group_louvain())
-
-# Saving resutls in database 
-
-# dbWriteTable(con, 
-#              "journal_citation_network_nodes", 
-#              journal_citation_graph_weighted_tbl |> 
-#                activate(nodes) |> 
-#                data.frame())
-# 
-# dbWriteTable(con, 
-#              "journal_citation_network_edges", 
-#              journal_citation_graph_weighted_tbl |> 
-#                activate(edges) |> 
-#                data.frame())
-
-
-# Filtering the network to make it more readable in a figure
-
-journal_citation_graph_weighted_tbl_small <- 
-  journal_citation_graph_weighted_tbl |> 
-  activate(nodes) |> 
-  filter(degree >= 1) |> 
-  activate(edges) |> 
-  filter(weight != 1)
-
-communities <- 
-  journal_citation_graph_weighted_tbl_small |> 
-  activate(nodes) |> 
-  data.frame() |> 
-  count(community, sort = TRUE) |> 
-  slice(1:10) |> 
-  select(community) |> 
-  pull()
-
-# Filtering biggest communities 
-
-journal_citation_graph_weighted_tbl_small_fig <- 
-  journal_citation_graph_weighted_tbl_small |> 
-  activate(nodes) |> 
-  filter(community %in% communities)
-```
-
-## Figure 4 Journal Citation Network
-
-Selecting nodes to show
-
-```{r}
-jc_com_1 <- 
-  journal_citation_graph_weighted_tbl_small_fig |> 
-  activate(nodes) |> 
-  filter(community == communities[1]) |> 
-  mutate(degree = centrality_degree()) |> 
-  arrange(desc(degree)) |> 
-  slice(1:10) |> 
-  data.frame() |> 
-  select(name)
-
-jc_com_2 <- 
-  journal_citation_graph_weighted_tbl_small_fig |> 
-  activate(nodes) |> 
-  filter(community == communities[2]) |> 
-  mutate(degree = centrality_degree()) |> 
-  arrange(desc(degree)) |> 
-  slice(1:10) |> 
-  data.frame() |> 
-  select(name)
-
-jc_com_3 <- 
-  journal_citation_graph_weighted_tbl_small_fig |> 
-  activate(nodes) |> 
-  filter(community == communities[3]) |> 
-  mutate(degree = centrality_degree()) |> 
-  arrange(desc(degree)) |> 
-  slice(1:10) |> 
-  data.frame() |> 
-  select(name)
-
-jc_com_4 <- 
-  journal_citation_graph_weighted_tbl_small_fig |> 
-  activate(nodes) |> 
-  filter(community == communities[4]) |> 
-  mutate(degree = centrality_degree()) |> 
-  arrange(desc(degree)) |> 
-  slice(1:10) |> 
-  data.frame() |> 
-  select(name)
-
-jc_com_5 <- 
-  journal_citation_graph_weighted_tbl_small_fig |> 
-  activate(nodes) |> 
-  filter(community == communities[5]) |> 
-  mutate(degree = centrality_degree()) |> 
-  arrange(desc(degree)) |> 
-  slice(1:10) |> 
-  data.frame() |> 
-  select(name)
-
-jc_com_6 <- 
-  journal_citation_graph_weighted_tbl_small_fig |> 
-  activate(nodes) |> 
-  filter(community == communities[6]) |> 
-  mutate(degree = centrality_degree()) |> 
-  arrange(desc(degree)) |> 
-  slice(1:10) |> 
-  data.frame() |> 
-  select(name)
-
-jc_com_7<- 
-  journal_citation_graph_weighted_tbl_small_fig |> 
-  activate(nodes) |> 
-  filter(community == communities[7]) |> 
-  mutate(degree = centrality_degree()) |> 
-  arrange(desc(degree)) |> 
-  slice(1:10) |> 
-  data.frame() |> 
-  select(name)
-
-jc_com_8 <- 
-  journal_citation_graph_weighted_tbl_small_fig |> 
-  activate(nodes) |> 
-  filter(community == communities[8]) |> 
-  mutate(degree = centrality_degree()) |> 
-  arrange(desc(degree)) |> 
-  slice(1:10) |> 
-  data.frame() |> 
-  select(name)
-
-jc_com_9 <- 
-  journal_citation_graph_weighted_tbl_small_fig |> 
-  activate(nodes) |> 
-  filter(community == communities[9]) |> 
-  mutate(degree = centrality_degree()) |> 
-  arrange(desc(degree)) |> 
-  slice(1:10) |> 
-  data.frame() |> 
-  select(name)
-
-jc_com_10 <- 
-  journal_citation_graph_weighted_tbl_small_fig |> 
-  activate(nodes) |> 
-  filter(community == communities[10]) |> 
-  mutate(degree = centrality_degree()) |> 
-  arrange(desc(degree)) |> 
-  slice(1:10) |> 
-  data.frame() |> 
-  select(name)
-
-jc_com <- 
-  jc_com_1 |> 
-  bind_rows(jc_com_2,
-            jc_com_3,
-            # jc_com_4,
-            # jc_com_5,
-            # jc_com_6,
-            # jc_com_7,
-            # jc_com_8,
-            # jc_com_9,
-            # jc_com_10
-            )
-```
-
-## Filtering and plotting the journal citatio nnetwork
-
-```{r}
-# journal_citation_graph_weighted_tbl_small_fig_gephi <- 
-  journal_citation_graph_weighted_tbl_small_fig |> 
-  activate(nodes) |> 
-  filter(name %in% jc_com$name) |>
-  mutate(degree = centrality_degree()) |> 
-  filter(degree != 0) |> 
-  ggraph(layout = "graphopt") +
-  geom_edge_link(width = 1,
-                 colour = "lightgray") +
-  geom_node_point(aes(color = factor(community), 
-                      size = degree)) +
-  
-  geom_node_text(aes(label = name), repel = TRUE) +
-  theme_graph()
-
-```
-
-### Export graph to gephi 
-
-```{r}
-nodes <- 
-  journal_citation_graph_weighted_tbl_small_fig_gephi |> 
-  activate(nodes) |> 
-  as_tibble() |> 
-  rename(author = name) |> 
-  rownames_to_column("name")
-
-edges <- 
-  journal_citation_graph_weighted_tbl_small_fig_gephi |> 
-  activate(edges) |> 
-  as_tibble()
-
-
-graph_from_data_frame(d = edges, vertices = nodes, directed = FALSE) |> 
-  write.graph(here("output",
-                   "journal_citation_graph.graphml"),
-              "graphml")
-
-```
-
 
 
 # Others
@@ -2235,7 +2369,7 @@ dummy_tbl_graph <-
 dummy_tbl_graph |> 
   activate(nodes) |> 
   data.frame() |> View()
-  arrange(desc(degree)) |> 
+arrange(desc(degree)) |> 
   slice(1:10)
 
 david_blei_1 <- 
@@ -2272,13 +2406,11 @@ david_blei |>
   ggplot(aes(x = year, y = n)) +
   geom_line(aes(group = 1)) + 
   geom_point()
-  
-```
 
+```
 
 ```{r}
 write_csv(wos_scopus_tos$df, "wos_scopus.csv")
 
 write
 ```
-

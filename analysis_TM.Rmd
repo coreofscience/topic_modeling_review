@@ -261,7 +261,7 @@ TC_all <-
   arrange(desc(PY))
 ```
 
-# Figure 1
+# 3.1.1 Scientific Production
 
 ## Figure 1a
 
@@ -400,8 +400,6 @@ figure_1c
 Final Figure 1 with inkscape
 
 ![](figures/Figure_1_a.svg)
-
-# Scientific Production
 
 ### Total publications
 
@@ -640,7 +638,7 @@ mean(stability_publications_growth_rate |>
      na.rm = TRUE)
 ```
 
-# Country production analysis
+# 3.1.2 Country analysis
 
 ## Table 2 - Country production
 
