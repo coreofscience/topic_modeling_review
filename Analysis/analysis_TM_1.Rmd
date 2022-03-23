@@ -1015,7 +1015,7 @@ journal_citation_graph_weighted_tbl_small_fig <-
   filter(community %in% communities)
 ```
 
-## Figure 4 Journal Citation Network
+## Figure 3 Journal Citation Network
 
 Selecting nodes to show
 
@@ -1134,25 +1134,65 @@ jc_com <-
   )
 ```
 
-## Filtering and plotting the journal citatio nnetwork
+### Figure 3a Journal Citation
 
 ```{r}
-# journal_citation_graph_weighted_tbl_small_fig_gephi <- 
+figure_3a <- 
 journal_citation_graph_weighted_tbl_small_fig |> 
   activate(nodes) |> 
   filter(name %in% jc_com$name) |>
-  mutate(degree = centrality_degree()) |> 
+  mutate(degree = centrality_degree(),
+         community = factor(community)) |> 
   filter(degree != 0) |> 
   ggraph(layout = "graphopt") +
-  geom_edge_link(width = 1,
+  geom_edge_link(aes(width = weight),
                  colour = "lightgray") +
-  geom_node_point(aes(color = factor(community), 
+      scale_edge_width(name = "Link strength") +
+  geom_node_point(aes(color = community, 
                       size = degree)) +
-  
   geom_node_text(aes(label = name), repel = TRUE) +
+  scale_size(name = "Degree") +
+  # scale_color_binned(name = "Communities") +
   theme_graph()
 
+figure_3a
 ```
+
+### Figure 3b clusters
+
+```{r}
+figure_3b <- 
+  journal_citation_graph_weighted_tbl_small |> 
+  activate(nodes) |> 
+  data.frame() |> 
+  select(community) |> 
+  count(community, sort = TRUE) |> 
+  slice(1:10) |> 
+  ggplot(aes(x = reorder(community, n), y = n)) +
+  geom_point(stat = "identity") +
+  geom_line(group = 1) + 
+  # geom_text(label = as.numeric(community),
+  #           nudge_x = 0.5,
+  #           nudge_y = 0.5,
+  #           check_overlap = T) +
+  labs(title = "Communities by size", 
+       x = "communities", 
+       y = "Authors") +
+  theme(text = element_text(color = "black",
+                            face = "bold",
+                            family = "Times New Roman"),
+        plot.title = element_text(size = 25),
+        panel.background = element_rect(fill = "white"), 
+        axis.text.y = element_text(size = 15, 
+                                   colour = "black"),
+        axis.text.x = element_text(size = 15,
+                                   colour = "black"),
+        axis.title.x = element_text(size = 20),
+        axis.title.y = element_text(size = 20)) 
+
+figure_3b
+```
+
 
 ### Export graph to gephi
 
@@ -1176,6 +1216,9 @@ graph_from_data_frame(d = edges, vertices = nodes, directed = FALSE) |>
               "graphml")
 
 ```
+
+Final graph Figure 4
+
 
 
 # 3.1.4 Author Analysis
@@ -1692,7 +1735,7 @@ asn_TM_connected <-
          community = as.factor(group_louvain()))
 ```
 
-Plot size of each community
+### Figure 4b Plot size of each community
 
 ```{r}
 asn_TM_connected |> 
@@ -1723,7 +1766,7 @@ asn_TM_connected |>
         axis.title.y = element_text(size = 20)) 
 ```
 
-### Figure 1c Ploting longitudinal data of ASN
+### Figure 4c Ploting longitudinal data of ASN
 
 ```{r}
 # Create a dataframe with links 
