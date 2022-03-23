@@ -221,7 +221,13 @@ TC_wos <-
   group_by(PY) |> 
   summarise(TC_sum = sum(TC)) |> 
   arrange(desc(PY)) |> 
-  na.omit() 
+  na.omit() |> 
+  bind_rows(tibble(PY = c(2004, 
+                          2005, 
+                          2006, 
+                          2007, 
+                          2008),
+                   TC_sum = 0))
 ```
 
 Time Cited from WoS
@@ -233,7 +239,26 @@ TC_scopus <-
   group_by(PY) |> 
   summarise(TC_sum = sum(TC)) |> 
   arrange(desc(PY)) |> 
-  na.omit() 
+  na.omit() |> 
+  bind_rows(tibble(PY = 2007, TC_sum = 0))
+```
+
+Time cited all
+
+```{r}
+TC_all <- 
+  TC_scopus |> 
+  left_join(TC_wos, 
+            by = "PY", 
+            suffix = c("_wos", 
+                       "_scopus")) |> 
+  replace_na(replace = list(TC_sum_scopus = 0)) |> 
+  mutate(TC_sum_all = TC_sum_wos + TC_sum_scopus,
+         TC_total = sum(TC_sum_all),
+         TC_percentage = round(TC_sum_all/TC_total, digits = 2)) |> 
+  select(PY, TC_sum_all, TC_percentage) |> 
+  filter(PY != 2022) |> 
+  arrange(desc(PY))
 ```
 
 # Figure 1
@@ -280,7 +305,7 @@ figure_1a
 ```{r}
 
 figure_1b <- 
-  figure_1_data |> 
+  wos_scopus_total_annual_production_dummy |> 
   ggplot(aes(x = PY, y = total)) +
   geom_line(stat = "identity", color = "red") +
   geom_point(stat = "identity", color = "red") +
@@ -307,28 +332,36 @@ figure_1b <-
   labs(y = "Number of total publications", 
        x = "Year") +
   scale_y_continuous(breaks = seq(0,300, 
-                                  by = 50)) 
+                                  by = 50)) +
+  geom_bar(stat = "identity",
+           aes(y = n_total)) +
+  geom_line(aes(y = total)) +
+  scale_y_continuous(
+    name = "First Axis",
+    sec.axis = sec_axis(~., name = "Second Axis"), 
+  )
 
 figure_1b
 
 ```
 
+## Figure 1b_1
+
+```{r}
+wos_scopus_total_annual_production_dummy |> 
+  ggplot(aes(x = PY)) +
+  geom_bar(stat = "identity",
+           aes(y = n_total)) +
+  geom_line(aes(y = total)) +
+  scale_y_continuous(
+    name = "First Axis",
+    sec.axis = sec_axis(~., name = "Second Axis"), 
+  )
+```
+
 ## Figure 1c
 
 ```{r}
-TC_all <- 
-  TC_scopus |> 
-  left_join(TC_wos, 
-            by = "PY", 
-            suffix = c("_wos", 
-                       "_scopus")) |> 
-  replace_na(replace = list(TC_sum_scopus = 0)) |> 
-  mutate(TC_sum_all = TC_sum_wos + TC_sum_scopus,
-         TC_total = sum(TC_sum_all),
-         TC_percentage = round(TC_sum_all/TC_total, digits = 2)) |> 
-  select(PY, TC_sum_all, TC_percentage) |> 
-  filter(PY != 2022)
-
 figure_1c <- 
   TC_all |> 
   ggplot(aes(x = PY , y = TC_sum_all)) +
@@ -366,7 +399,7 @@ figure_1c
 
 Final Figure 1 with inkscape
 
-![](figures/Figure_1_1.svg)
+![](figures/Figure_1_a.svg)
 
 # Scientific Production
 
