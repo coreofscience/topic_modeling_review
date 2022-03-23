@@ -116,7 +116,14 @@ wos_anual_production <-
   na.omit() |> 
   filter(PY >= 2000,
          PY < year(today())) |> 
-  mutate(ref_type = "wos") 
+  mutate(ref_type = "wos") |> 
+  bind_rows(tibble(PY = c(2004, 
+                          2005, 
+                          2006, 
+                          2007, 
+                          2008),
+                   n = 0, 
+                   ref_type = "wos"))
 
 scopus_anual_production  <- 
   scopus |> 
@@ -129,34 +136,76 @@ scopus_anual_production  <-
   bind_rows(tibble(PY = 2007, n = 0, ref_type = "scopus"))
 
 total_anual_production <- 
-  scopus_wos_final |> 
+  wos_scopus_tos$df |> 
   select(PY) |> 
   count(PY, sort = TRUE) |> 
   na.omit() |> 
   filter(PY >= 2000,
          PY < year(today())) |>
   mutate(ref_type = "total") |> 
-  bind_rows(tibble(PY = 2007, n = 0, ref_type = "total"))
+  bind_rows(tibble(PY = 2007, 
+                   n = 0, 
+                   ref_type = "total")) |> 
+  arrange(desc(PY))
 
 wos_scopus_total_annual_production <- 
   wos_anual_production |> 
   bind_rows(scopus_anual_production,
             total_anual_production) 
 
-figure_1_data <- 
-  wos_scopus_total_annual_production |> 
-  mutate(PY = replace_na(PY, replace = 0)) |> 
-  pivot_wider(names_from = ref_type, 
-              values_from = n) |> 
+# Checking results of total
+
+wos_scopus_total_annual_production_dummy <- 
+  total_anual_production |> 
+  rename(n_total = n,
+         ref_type_total = ref_type) |> 
+  left_join(wos_anual_production |> 
+              rename(n_wos = n,
+              ref_type_wos = ref_type) ) |> 
+  left_join(scopus_anual_production |> 
+              rename(n_scopus = n,
+              ref_type_scopus = ref_type)) |> 
+  mutate(total = if_else(n_total < n_wos | n_total < n_scopus, 
+                         n_scopus, # it could be improved
+                         n_total))
+
+wos_scopus_total_annual_production_total <- 
+  wos_scopus_total_annual_production_dummy |> 
+  select(PY, 
+         n = total,
+         ref_type = ref_type_total)
+
+wos_scopus_total_annual_production_scopus <- 
+  wos_scopus_total_annual_production_dummy |> 
+  select(PY, 
+         n = n_scopus,
+         ref_type = ref_type_scopus)
+
+wos_scopus_total_annual_production_wos <- 
+  wos_scopus_total_annual_production_dummy |> 
+  select(PY, 
+         n = n_wos,
+         ref_type = ref_type_wos)
+
+wos_scopus_total_annual_production <- 
+  wos_scopus_total_annual_production_total |> 
+  bind_rows(wos_scopus_total_annual_production_scopus,
+            wos_scopus_total_annual_production_wos) 
+
+figure_1_data <-
+  wos_scopus_total_annual_production |>
+  mutate(PY = replace_na(PY, replace = 0)) |>
+  pivot_wider(names_from = ref_type,
+              values_from = n) |>
   arrange(desc(PY))
 
-wos_scopus_total_annual_production |> 
+wos_scopus_total_annual_production |>
   ggplot(aes(x = PY, y = n, color = ref_type)) +
   geom_line() +
-  labs(title = "Annual Scientific Production", 
+  labs(title = "Annual Scientific Production",
        x = "years",
        y = "papers") +
-  theme(plot.title = element_text(hjust = 0.5)) 
+  theme(plot.title = element_text(hjust = 0.5))
 ```
 
 I would like to create a bar graph of WoS and Scopus data
@@ -1075,7 +1124,6 @@ wos_author <- # 1339 - 3
 
 ### 4. Merging main with refs dois with names
 
-
 ```{r}
 #################################################################
 #### Uni?n de los datos de WoS y de las referencias de estos ####
@@ -1125,7 +1173,6 @@ wos_author_removed <-
   wos_author_ref |> 
   filter(!(doi %in% dois_to_remove$doi))
 ```
-
 
 ```{r}
 ###########################
@@ -1209,7 +1256,6 @@ asn_TM_no_years <-
   
 ```
 
-
 ## ASN stats
 
 Filtering the connected graph and some stats - degree and louvain
@@ -1255,7 +1301,7 @@ asn_TM_connected |>
         axis.title.y = element_text(size = 20)) 
 ```
 
-Filtering only the top 10 nodes with best degree in the first 6 clusters. 
+Filtering only the top 10 nodes with best degree in the first 6 clusters.
 
 ```{r}
 asn_TM_connected_1 <- 
@@ -1326,7 +1372,6 @@ asn_TM_connected_6 <-
 
 ```
 
-
 Saving the nodes we're gonna show
 
 ```{r}
@@ -1376,7 +1421,6 @@ nodes_selected_20 <-
 
 ```
 
-
 Filtering selected nodes
 
 ```{r}
@@ -1396,7 +1440,6 @@ asn_TM_selected_nodes |>
   geom_edge_link() +
   geom_node_point()
 ```
-
 
 Exporting graph
 
@@ -1423,7 +1466,7 @@ asn_igraph |> write_graph("output/asn_igraph.graphml", "graphml")
   
 ```
 
-The graph is super big! We'll 
+The graph is super big! We'll
 
 Creating the weighted network of academic social network
 
@@ -1475,7 +1518,6 @@ asn_graph_tbl |>
   count(cluster) |> 
   ggplot(aes(x = n))
 ```
-
 
 Creating the academic social network with year
 
@@ -1616,7 +1658,6 @@ asn_graph <-
   asn_wos_scopus_csv |> 
   graph_from_data_frame(directed = FALSE) 
 ```
-
 
 # Others
 
