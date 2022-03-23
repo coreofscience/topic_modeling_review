@@ -828,7 +828,7 @@ write.xlsx(x = wos_scopus_tos$df, file = "output/wos_scopus.xlsx")
 
 ## Scopus Journal Citation Network
 
-Getting JOURNAL names 
+Getting JOURNAL names
 
 ```{r}
 journals_all_abbr <- # From Scimago data
@@ -839,7 +839,6 @@ journals_all_abbr <- # From Scimago data
   select(journal_abbr) |> 
   unique()
 ```
-
 
 Creating the Journal Citation Network from Scopus
 
@@ -880,7 +879,6 @@ journal_citation_graph_weighted_tbl <-
   mutate(degree = centrality_degree(),
          community = tidygraph::group_louvain())
 ```
-
 
 ## WoS Journal Citation Network
 
@@ -1193,7 +1191,6 @@ figure_3b <-
 figure_3b
 ```
 
-
 ### Export graph to gephi
 
 ```{r}
@@ -1219,7 +1216,7 @@ graph_from_data_frame(d = edges, vertices = nodes, directed = FALSE) |>
 
 Final graph Figure 4
 
-
+![](images/Figure_3.svg)
 
 # 3.1.4 Author Analysis
 
@@ -2390,7 +2387,6 @@ sungyoung_lee_friends <-
 ```
 
 ## Cluster 3
-
 
 # Others
 
