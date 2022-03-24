@@ -2388,6 +2388,62 @@ sungyoung_lee_friends <-
 
 ## Cluster 3
 
+# 3.2. ToS - Citation Network
+
+## Figure 5b Clusters
+
+Reading data
+
+```{r}
+tm_graph_tbl <- 
+  read_graph(file = here("output", "citation_network_full TM.graphml"), 
+             format = "graphml") |> 
+  as_tbl_graph()
+```
+
+Creating the figure
+
+```{r}
+# figure_5b <- 
+  tm_graph_tbl |> 
+  activate(nodes) |> 
+  mutate(year = str_extract(string = full_name, pattern = ".*([0-9]{4})")) |> 
+  data.frame() |> 
+  select(year) |> slice(1)
+
+
+figure_3b <- 
+  journal_citation_graph_weighted_tbl_small |> 
+  activate(nodes) |> 
+  data.frame() |> 
+  select(community) |> 
+  count(community, sort = TRUE) |> 
+  slice(1:10) |> 
+  ggplot(aes(x = reorder(community, n), y = n)) +
+  geom_point(stat = "identity") +
+  geom_line(group = 1) + 
+  # geom_text(label = as.numeric(community),
+  #           nudge_x = 0.5,
+  #           nudge_y = 0.5,
+  #           check_overlap = T) +
+  labs(title = "Communities by size", 
+       x = "communities", 
+       y = "Authors") +
+  theme(text = element_text(color = "black",
+                            face = "bold",
+                            family = "Times New Roman"),
+        plot.title = element_text(size = 25),
+        panel.background = element_rect(fill = "white"), 
+        axis.text.y = element_text(size = 15, 
+                                   colour = "black"),
+        axis.text.x = element_text(size = 15,
+                                   colour = "black"),
+        axis.title.x = element_text(size = 20),
+        axis.title.y = element_text(size = 20)) 
+
+figure_3b
+```
+
 # Others
 
 ```{r}
