@@ -861,6 +861,31 @@ journal_citation_edgelist <-
   filter(!(JI_main == JI_ref))
 ```
 
+Creating data to write some paragraphs 
+
+```{r}
+journal_citation_edgelist_ids <- 
+  wos_scopus_tos$df |> 
+  select(JI_main = JI, 
+         CR,
+         TI,
+         PY) |> 
+  mutate(JI_main = str_remove_all(JI_main, "\\.")) |> 
+  separate_rows(CR, sep = ";") |> 
+  mutate(JI_ref = str_remove(CR, ".*([0-9]{4}), "), 
+         JI_ref = str_remove(JI_ref, ", .*")) |> 
+  filter(!str_detect(JI_ref, "[0-9]")) |> 
+  # select(-CR) |> 
+  na.omit() |> 
+  mutate(JI_ref = str_trim(JI_ref, 
+                           side = "both")) |> 
+  inner_join(journals_all_abbr, 
+             by = c("JI_ref" = "journal_abbr")) |> 
+  filter(!(JI_ref == "")) |> 
+  filter(!(JI_main == JI_ref))
+```
+
+
 Creating the graph object
 
 ```{r}
